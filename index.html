@@ -355,7 +355,7 @@
         </div>
         <label class="check"><input type="checkbox" id="chunkGrid">Chunk-Raster</label>
         <span class="spacer"></span>
-        <button class="btn" type="button" id="openChunkbase">🧭 Biome &amp; Bauwerke in Chunkbase</button>
+        <a class="btn" id="openChunkbase" href="https://www.chunkbase.com/apps/seed-map" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">🧭 Biome &amp; Bauwerke in Chunkbase</a>
       </div>
       <div class="map-wrap">
         <canvas id="mapCanvas" aria-label="Karte mit deinen Markern"></canvas>
@@ -1379,16 +1379,20 @@
     if (x !== null && z !== null) centerOn(x, z);
   });
 
-  $("openChunkbase").addEventListener("click", () => {
+  const chunkbaseUrl = () => "https://www.chunkbase.com/apps/seed-map#seed=" + encodeURIComponent(currentSeed || "") +
+    "&dimension=" + view.dim + "&x=" + Math.round(view.cx) + "&z=" + Math.round(view.cz);
+  $("openChunkbase").addEventListener("click", (e) => {
+    $("openChunkbase").href = chunkbaseUrl();
+    if (currentSeed) {
+      $("mapInfo").className = "map-info";
+      $("mapInfo").innerHTML = "Falls sich kein neuer Tab öffnet, kopiere diesen Link in deinen Browser:<br><span class='mono small' style='word-break:break-all'>" + esc(chunkbaseUrl()) + "</span>";
+    }
     if (!currentSeed) {
+      e.preventDefault();
       $("mapInfo").className = "map-info";
       $("mapInfo").innerHTML = "Lade zuerst oben einen Seed, dann öffnet sich Chunkbase direkt mit deiner Welt.";
       $("seedInput").focus();
-      return;
     }
-    const url = "https://www.chunkbase.com/apps/seed-map#seed=" + encodeURIComponent(currentSeed) +
-      "&dimension=" + view.dim + "&x=" + Math.round(view.cx) + "&z=" + Math.round(view.cz);
-    window.open(url, "_blank", "noopener");
   });
 
   seedListeners.push(() => { selectedId = null; loadMarkers(); renderMarkerList(); drawMap(); });
