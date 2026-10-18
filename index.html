@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bedrock Welt-Helfer</title>
+<meta name="description" content="Seed-Dashboard, Erz-Höhen, Stronghold-Peilung und Nether-Rechner für die aktuelle Minecraft Bedrock Edition.">
+<style>
+  :root {
+    --bg: #14161a;
+    --bg-2: #1c1f25;
+    --card: #23272f;
+    --card-2: #2b3039;
+    --line: #3a404b;
+    --text: #e8e6e1;
+    --muted: #9aa1ad;
+    --grass: #5fae3c;
+    --grass-dark: #3f7f25;
+    --diamond: #4fd8d0;
+    --gold: #f2c744;
+    --redstone: #e0443a;
+    --nether: #c2452f;
+    --end: #b48ce8;
+    --shadow: 0 4px 0 #0b0c0f;
+    --radius: 6px;
+    --mono: "Consolas", "SFMono-Regular", "Menlo", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      linear-gradient(45deg, rgba(255,255,255,.015) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.015) 75%),
+      linear-gradient(45deg, rgba(255,255,255,.015) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.015) 75%);
+    background-size: 32px 32px;
+    background-position: 0 0, 16px 16px;
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.5;
+  }
+  a { color: var(--diamond); }
+
+  /* Header */
+  header {
+    background: linear-gradient(180deg, var(--grass) 0 14px, #6b4a2b 14px 100%);
+    border-bottom: 4px solid #3d2a17;
+    padding: 30px 16px 18px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header .wrap { padding: 0; }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.5rem, 4vw, 2.3rem);
+    letter-spacing: .5px;
+    text-shadow: 3px 3px 0 #000;
+  }
+  header p { margin: 4px 0 0; color: #f0dfc8; text-shadow: 1px 1px 0 #000; }
+  .badge {
+    display: inline-block;
+    font-size: .75rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #000a;
+    border: 1px solid #fff3;
+    margin-top: 8px;
+  }
+
+  /* Nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: #0f1114ee;
+    backdrop-filter: blur(6px);
+    border-bottom: 2px solid var(--line);
+  }
+  nav .wrap { display: flex; gap: 6px; overflow-x: auto; padding-top: 8px; padding-bottom: 8px; scrollbar-width: none; }
+  nav a {
+    flex: 0 0 auto;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: var(--radius);
+    padding: 6px 12px;
+    font-size: .9rem;
+    font-weight: 600;
+  }
+  nav a:hover, nav a:focus-visible { border-color: var(--grass); outline: none; }
+
+  main { padding: 24px 0 60px; }
+  section { margin-bottom: 40px; scroll-margin-top: 70px; }
+  h2 {
+    font-size: 1.35rem;
+    margin: 0 0 14px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  h2 .icon {
+    width: 28px; height: 28px; display: inline-grid; place-items: center;
+    border-radius: 4px; box-shadow: inset -3px -3px 0 #0005; font-size: 1rem;
+  }
+  h3 { margin: 0 0 8px; font-size: 1.05rem; }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+  .grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  @media (max-width: 420px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    min-width: 0;
+  }
+  .card.accent-diamond { border-top: 4px solid var(--diamond); }
+  .card.accent-gold { border-top: 4px solid var(--gold); }
+  .card.accent-nether { border-top: 4px solid var(--nether); }
+  .card.accent-end { border-top: 4px solid var(--end); }
+  .card.accent-grass { border-top: 4px solid var(--grass); }
+  .card p { margin: 0 0 8px; }
+  .card ul, .card ol { margin: 0; padding-left: 20px; }
+  .card li { margin-bottom: 4px; }
+  .muted { color: var(--muted); font-size: .9rem; }
+  .small { font-size: .82rem; }
+
+  /* Form elements */
+  label { display: block; font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    background: #0d0f12;
+    color: var(--text);
+    border: 2px solid var(--line);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 1rem;
+  }
+  input:focus { border-color: var(--grass); outline: none; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 120px; min-width: 0; }
+  .btn {
+    cursor: pointer;
+    font: inherit; font-weight: 700;
+    color: #fff;
+    background: var(--grass-dark);
+    border: 2px solid #000;
+    border-radius: 4px;
+    padding: 10px 16px;
+    box-shadow: inset -3px -3px 0 #0006, inset 3px 3px 0 #ffffff30;
+    text-shadow: 1px 1px 0 #000;
+  }
+  .btn:hover { background: var(--grass); }
+  .btn:active { box-shadow: inset 3px 3px 0 #0006; }
+  .btn.secondary { background: #4a505c; }
+  .btn.secondary:hover { background: #5b6270; }
+
+  /* Seed */
+  .seed-form { display: flex; gap: 10px; flex-wrap: wrap; }
+  .seed-form input { flex: 1 1 240px; }
+  .seed-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0; }
+  .chip {
+    font-size: .8rem; font-family: var(--mono);
+    background: var(--card-2); border: 1px solid var(--line);
+    padding: 3px 8px; border-radius: 3px;
+  }
+  .chip.warn { border-color: var(--gold); color: var(--gold); }
+  #dashboard[hidden] { display: none; }
+  .plan-step { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .plan-step:last-child { border-bottom: 0; }
+  .plan-step input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--grass); flex: 0 0 auto; }
+  .plan-step.done span { text-decoration: line-through; color: var(--muted); }
+  .progress { height: 12px; background: #0d0f12; border: 2px solid var(--line); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
+  .progress > div { height: 100%; background: repeating-linear-gradient(90deg, var(--grass) 0 10px, var(--grass-dark) 10px 20px); width: 0; transition: width .3s; }
+
+  /* Ore table */
+  .ore-list { display: grid; gap: 10px; }
+  .ore {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 12px; align-items: center;
+    background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 10px;
+  }
+  @media (max-width: 640px) { .ore { grid-template-columns: 1fr; } }
+  .ore-name { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .swatch { width: 18px; height: 18px; border-radius: 2px; flex: 0 0 auto; box-shadow: inset -3px -3px 0 #0006, inset 3px 3px 0 #fff4; }
+  .ore-best { font-family: var(--mono); font-size: .85rem; color: var(--gold); }
+  .bar {
+    position: relative; height: 18px; background: #0d0f12; border: 1px solid var(--line); border-radius: 2px;
+  }
+  .bar .range { position: absolute; top: 0; bottom: 0; opacity: .45; }
+  .bar .peak { position: absolute; top: -3px; bottom: -3px; width: 4px; background: #fff; box-shadow: 0 0 6px #fff; }
+  .bar-scale { display: flex; justify-content: space-between; font-family: var(--mono); font-size: .7rem; color: var(--muted); margin-top: 2px; }
+  .ore-note { font-size: .85rem; color: var(--muted); grid-column: 1 / -1; }
+
+  /* Tabs */
+  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .tab {
+    cursor: pointer; font: inherit; font-weight: 600; font-size: .9rem;
+    color: var(--text); background: var(--card); border: 2px solid var(--line);
+    padding: 8px 12px; border-radius: 4px;
+  }
+  .tab[aria-selected="true"] { border-color: var(--grass); background: #2b3a25; }
+  .tabpanel[hidden] { display: none; }
+
+  /* Calculators */
+  .result {
+    margin-top: 14px;
+    background: #0d0f12; border: 2px solid var(--line); border-radius: 4px;
+    padding: 12px; font-family: var(--mono);
+  }
+  .result .big { font-size: 1.35rem; font-weight: 700; color: var(--diamond); word-break: break-word; }
+  .result.nether .big { color: #ff8a65; }
+  .result.end .big { color: var(--end); }
+  .result.error .big { color: var(--redstone); font-size: 1rem; }
+  .swap-row { display: flex; align-items: center; justify-content: center; margin: 6px 0; color: var(--muted); font-size: .85rem; gap: 8px; }
+  .calc-sides { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .side { background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 12px; }
+  .side h3 { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  canvas { width: 100%; max-width: 100%; height: auto; background: #0d0f12; border: 2px solid var(--line); border-radius: 4px; margin-top: 12px; display: block; }
+
+  .kbd { font-family: var(--mono); background: #0d0f12; border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 3px; padding: 0 5px; font-size: .85em; }
+  .callout { border-left: 4px solid var(--gold); background: #2e2a1e; padding: 10px 12px; border-radius: 0 4px 4px 0; font-size: .9rem; margin-top: 10px; }
+  .callout.info { border-color: var(--diamond); background: #1b2c2d; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .5px; }
+  td.mono, .mono { font-family: var(--mono); }
+  .table-scroll { overflow-x: auto; }
+
+  footer { border-top: 2px solid var(--line); padding: 20px 0 40px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>⛏️ Bedrock Welt-Helfer</h1>
+    <p>Seed-Dashboard, Erz-Höhen, Stronghold-Peilung &amp; Nether-Rechner</p>
+    <span class="badge">Minecraft Bedrock Edition · Welthöhe Y −64 bis 320</span>
+  </div>
+</header>
+
+<nav aria-label="Bereiche">
+  <div class="wrap">
+    <a href="#seed">🌱 Seed</a>
+    <a href="#ores">💎 Erze</a>
+    <a href="#stronghold">👁️ Endportal</a>
+    <a href="#structures">🏰 Bauwerke</a>
+    <a href="#nether">🔥 Nether-Rechner</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+  <!-- 1. SEED -->
+  <section id="seed">
+    <h2><span class="icon" style="background:var(--grass)">🌱</span>Seed &amp; Dashboard</h2>
+    <div class="card accent-grass">
+      <form class="seed-form" id="seedForm" autocomplete="off">
+        <input type="text" id="seedInput" placeholder="Bedrock-Seed eingeben, z. B. -1234567890" aria-label="Bedrock-Seed" maxlength="64">
+        <button class="btn" type="submit">Welt laden</button>
+        <button class="btn secondary" type="button" id="seedClear">Zurücksetzen</button>
+      </form>
+      <div class="seed-meta" id="seedMeta"></div>
+      <p class="muted small" style="margin-top:10px">
+        Die App liest deine Welt nicht aus und kennt keine exakten Bauwerk-Positionen. Der Seed wird nur lokal in deinem Browser gespeichert und dient als Schlüssel für deinen persönlichen Fortschritt.
+      </p>
+    </div>
+
+    <div id="dashboard" hidden style="margin-top:16px">
+      <div class="grid">
+        <div class="card accent-grass">
+          <h3>🗺️ Erste 20 Minuten</h3>
+          <ol id="firstSteps"></ol>
+        </div>
+        <div class="card accent-diamond">
+          <h3>🧭 Such-Strategie für diese Welt</h3>
+          <ul id="strategyList"></ul>
+        </div>
+        <div class="card accent-gold">
+          <h3>🎯 Fortschritt in dieser Welt</h3>
+          <div class="progress" aria-hidden="true"><div id="progressBar"></div></div>
+          <p class="muted small" id="progressText"></p>
+          <div id="planList"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <h3>💡 Tipp für diesen Seed</h3>
+        <p id="seedTip"></p>
+        <button class="btn secondary" type="button" id="nextTip">Nächster Tipp</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. ORES -->
+  <section id="ores">
+    <h2><span class="icon" style="background:var(--diamond)">💎</span>Erze &amp; optimale Y-Höhen</h2>
+    <div class="grid-2">
+      <div class="card accent-diamond">
+        <div class="ore-list" id="oreList"></div>
+        <div class="bar-scale" style="margin-top:8px"><span>Legende: Balken = Vorkommen · weißer Strich = beste Höhe</span></div>
+      </div>
+      <div style="display:grid;gap:16px;align-content:start">
+        <div class="card accent-diamond">
+          <h3>💎 Diamanten: die beste Strategie</h3>
+          <ul>
+            <li><b>Branch-Mining auf Y −58</b>: Das ist knapp über den Bedrock-Schichten (Y −64 bis −60) und nah am Maximum der Diamant-Verteilung. Hier stört kaum Bedrock und es gibt wenig Lava-Seen von oben.</li>
+            <li><b>Gänge mit 2 Blöcken Abstand</b> (3 Blöcke Zwischenwand bei schnellerem Graben): Du siehst jeden Block der Wand und verpasst fast keine Adern.</li>
+            <li><b>Diamanten mit Luftkontakt sind seltener</b>: Erz, das an Luft grenzt, wird teilweise wieder verworfen. Graben findet deshalb mehr als nur Höhlen abzulaufen.</li>
+            <li><b>Glück III (Fortune III)</b> auf der Spitzhacke ergibt durchschnittlich etwa 2,2 Diamanten pro Erz. Hebe die Erze bis dahin auf, wenn du Behutsamkeit (Silk Touch) hast.</li>
+            <li>Nimm <b>Wassereimer</b> gegen Lava mit und grabe nie direkt unter dir.</li>
+          </ul>
+        </div>
+        <div class="card accent-gold">
+          <h3>⛏️ Mining-Faustregeln</h3>
+          <ul>
+            <li><b>Deepslate</b> (unter Y 0) lässt sich langsamer abbauen. Effizienz V + Eile-Leuchtfeuer helfen.</li>
+            <li><b>Große Höhlen</b> (Cheese/Spaghetti-Höhlen) bieten schnell Eisen, Kupfer und Kohle. Für Diamanten bringt Strip-Mining mehr.</li>
+            <li><b>Smaragd</b> gibt es nur in Gebirgs-Biomen. Handel mit Dorfbewohnern lohnt sich meist mehr.</li>
+            <li><b>Antiker Schrott</b> liegt im Nether auf Y 8–22, am besten Y 15. Betten und TNT sprengen ihn frei (Betten explodieren im Nether).</li>
+            <li><b>Riesige Eisen-/Kupferadern</b> entstehen zufällig im Deepslate (Eisen) bzw. höher (Kupfer), oft mit Rohstoffblöcken darin.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. STRONGHOLD -->
+  <section id="stronghold">
+    <h2><span class="icon" style="background:var(--end)">👁️</span>Endportal &amp; Stronghold peilen</h2>
+    <div class="grid-2">
+      <div class="card accent-end">
+        <h3>📐 Triangulations-Rechner (Bedrock-tauglich)</h3>
+        <p class="muted small">Bedrock zeigt keinen Blickwinkel an. Deshalb nutzt dieser Rechner <b>zwei Punkte pro Wurf</b>: wo du stehst und wo das Enderauge hinfliegt bzw. aufkommt. Aktiviere dazu in den Welteinstellungen <b>„Koordinaten anzeigen“</b>.</p>
+
+        <div class="calc-sides">
+          <div class="side">
+            <h3><span class="dot" style="background:var(--diamond)"></span>Wurf 1</h3>
+            <div class="row">
+              <div><label for="t1x">Standort X</label><input type="number" id="t1x" inputmode="numeric"></div>
+              <div><label for="t1z">Standort Z</label><input type="number" id="t1z" inputmode="numeric"></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div><label for="t1x2">Auge-Punkt X</label><input type="number" id="t1x2" inputmode="numeric"></div>
+              <div><label for="t1z2">Auge-Punkt Z</label><input type="number" id="t1z2" inputmode="numeric"></div>
+            </div>
+          </div>
+          <div class="side">
+            <h3><span class="dot" style="background:var(--gold)"></span>Wurf 2 (mind. 200 Blöcke seitlich versetzt)</h3>
+            <div class="row">
+              <div><label for="t2x">Standort X</label><input type="number" id="t2x" inputmode="numeric"></div>
+              <div><label for="t2z">Standort Z</label><input type="number" id="t2z" inputmode="numeric"></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div><label for="t2x2">Auge-Punkt X</label><input type="number" id="t2x2" inputmode="numeric"></div>
+              <div><label for="t2z2">Auge-Punkt Z</label><input type="number" id="t2z2" inputmode="numeric"></div>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" type="button" id="triCalc">Stronghold berechnen</button>
+          <button class="btn secondary" type="button" id="triDemo">Beispiel laden</button>
+        </div>
+        <div class="result end" id="triResult" aria-live="polite">
+          <div class="muted small">Ergebnis erscheint hier.</div>
+        </div>
+        <canvas id="triCanvas" width="600" height="360" aria-label="Skizze der beiden Wurflinien"></canvas>
+      </div>
+
+      <div style="display:grid;gap:16px;align-content:start">
+        <div class="card accent-end">
+          <h3>🧭 So peilst du richtig</h3>
+          <ol>
+            <li>Stelle dich auf freies Gelände und notiere <b>Standort X/Z</b>.</li>
+            <li>Wirf ein Enderauge. Folge der Flugrichtung geradeaus ca. 10–30 Blöcke bis zu dem Punkt, an dem es schwebt oder fällt. Notiere diesen <b>Auge-Punkt</b>.</li>
+            <li>Gehe <b>seitlich</b> (90° zur Flugrichtung) 200–500 Blöcke weit. Je größer der Versatz, desto genauer wird das Ergebnis.</li>
+            <li>Wiederhole den Wurf. Der Rechner schneidet beide Linien.</li>
+            <li>Am Ziel: weitere Augen werfen. Fliegt das Auge <b>nach unten</b> in den Boden, bist du direkt darüber. Dann treppenförmig nach unten graben, nie senkrecht.</li>
+          </ol>
+        </div>
+        <div class="card accent-end">
+          <h3>📌 Wissenswertes (Bedrock)</h3>
+          <ul>
+            <li>Enderaugen: <span class="kbd">Enderperle</span> + <span class="kbd">Lohenstaub</span>. Ein Auge kann beim Wurf zerbrechen (ca. 20 %). Plane <b>12+ Augen</b> ein, da Portalrahmen oft schon welche enthalten.</li>
+            <li>In Bedrock gibt es deutlich <b>mehr Strongholds</b> als in Java. Viele entstehen in der Nähe von Dörfern, darum liegt oft einer näher als gedacht.</li>
+            <li>Strongholds liegen meist <b>unter Y 0 bis um Y 40</b>, je nach Gelände. Der Portalraum hat eine Silberfisch-Spawnertreppe.</li>
+            <li>Ein vollständiges Portal braucht <b>12 Augen</b>. Fehlende Augen in die Rahmen setzen.</li>
+            <li>Vor dem Sprung: Betten funktionieren im End nicht als Respawn. Lege eine Truhe mit Ersatzausrüstung am Portal ab und setze deinen Spawn per Bett im Stronghold.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. STRUCTURES -->
+  <section id="structures">
+    <h2><span class="icon" style="background:var(--gold)">🏰</span>Wichtige Bauwerke finden</h2>
+    <div class="card">
+      <div class="tabs" role="tablist" id="structTabs"></div>
+      <div id="structPanels"></div>
+    </div>
+  </section>
+
+  <!-- 5. NETHER -->
+  <section id="nether">
+    <h2><span class="icon" style="background:var(--nether)">🔥</span>Nether ↔ Oberwelt Rechner</h2>
+    <div class="grid-2">
+      <div class="card accent-nether">
+        <div class="side">
+          <h3><span class="dot" style="background:var(--grass)"></span>Oberwelt</h3>
+          <div class="row">
+            <div><label for="owX">X</label><input type="number" id="owX" inputmode="numeric" placeholder="0"></div>
+            <div><label for="owZ">Z</label><input type="number" id="owZ" inputmode="numeric" placeholder="0"></div>
+          </div>
+        </div>
+        <div class="swap-row">⇅ ÷ 8 &nbsp;/&nbsp; × 8 · tippe in eine Seite, die andere rechnet automatisch</div>
+        <div class="side">
+          <h3><span class="dot" style="background:var(--nether)"></span>Nether</h3>
+          <div class="row">
+            <div><label for="nX">X</label><input type="number" id="nX" inputmode="numeric" placeholder="0"></div>
+            <div><label for="nZ">Z</label><input type="number" id="nZ" inputmode="numeric" placeholder="0"></div>
+          </div>
+        </div>
+        <div class="result nether" id="netherResult" aria-live="polite">
+          <div class="muted small">Gib Koordinaten ein.</div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn secondary" type="button" id="netherReset">Leeren</button>
+          <button class="btn secondary" type="button" id="netherCopy">Ergebnis kopieren</button>
+        </div>
+      </div>
+
+      <div style="display:grid;gap:16px;align-content:start">
+        <div class="card accent-nether">
+          <h3>🔗 Portale sauber verlinken</h3>
+          <ol>
+            <li>Baue das Oberwelt-Portal und notiere seine Koordinaten.</li>
+            <li>Rechne um: <b>Nether = Oberwelt ÷ 8</b> (abgerundet). Die Y-Höhe wird <b>nicht</b> umgerechnet.</li>
+            <li>Baue im Nether dein Portal <b>genau an die berechnete X/Z-Position</b>, bevor du zurückgehst.</li>
+            <li>Ein Portal sucht beim Durchgehen das nächstgelegene vorhandene Portal in der Zieldimension (Oberwelt: ca. 128 Blöcke Suchradius, Nether: ca. 16 Blöcke). Liegen zwei Portale zu nah beieinander, landest du im falschen.</li>
+            <li>Faustregel: Oberwelt-Portale <b>mindestens ~1000 Blöcke</b> auseinander (≈ 125 im Nether) halten, damit sich nichts überschneidet.</li>
+          </ol>
+        </div>
+        <div class="card accent-nether">
+          <h3>🚀 Reise-Tipps</h3>
+          <ul>
+            <li>1 Block im Nether = 8 Blöcke in der Oberwelt. Ein Nether-Tunnel auf Y ~ 120 (unter dem Bedrock-Dach) ist sicher und schnell.</li>
+            <li>Ghast-Feuerbälle sprengen Netherrack, aber <b>keinen Bruchstein</b>. Baue Tunnelwände und Portalrahmen-Schutz aus Bruchstein.</li>
+            <li>Kompasse drehen sich im Nether wild. Ein <b>Leitstein (Lodestone)</b> mit Kompass funktioniert dort zuverlässig.</li>
+            <li>Für weite Reisen: Elytra + Raketen ab dem End sind schneller als jede Nether-Autobahn.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Inoffizieller Fan-Helfer, nicht mit Mojang oder Microsoft verbunden. Höhenwerte beziehen sich auf die moderne Weltgeneration (seit Caves &amp; Cliffs, inklusive Trial Chambers, Pale Garden und späteren Updates). Mojang passt die Generierung gelegentlich an. Prüfe bei großen Updates die Patchnotes.</p>
+    <p>Keine Befehle, keine Cheats, keine Server-Verbindung. Alles läuft lokal in deinem Browser.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Storage helpers (silently fail in private mode) ---------- */
+  const store = {
+    get(key, fallback) {
+      try { const v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+      catch (e) { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* ignore */ }
+    },
+    remove(key) {
+      try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+    }
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /* ======================================================================
+     1. SEED & DASHBOARD
+     ====================================================================== */
+
+  // Small deterministic PRNG so every seed gets a stable tip order.
+  function hashString(str) {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffle(arr, rnd) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a;
+  }
+
+  const FIRST_STEPS = [
+    "Schau dich vom höchsten Punkt in Sichtweite um: Dörfer, Wasser und Biom-Ränder siehst du so am schnellsten.",
+    "Holz abbauen (mind. 2 Stacks), Werkbank, Holz- und dann Steinwerkzeuge herstellen.",
+    "Schafe für ein Bett suchen. In Bedrock setzt das Bett deinen Spawn sofort.",
+    "Koordinaten notieren: Spawn, erstes Lager und interessante Funde. Aktiviere „Koordinaten anzeigen“.",
+    "Kohle und Eisen in einer offenen Höhle sammeln, dann Eisenwerkzeuge und Schild herstellen.",
+    "Vor der ersten Nacht eine Unterkunft bauen oder schlafen."
+  ];
+
+  const STRATEGIES = [
+    "Erkunde zuerst in Richtung Fluss oder Küste. Dörfer, Schiffswracks und Ruinen liegen oft in Wassernähe.",
+    "Folge Biom-Grenzen: Ebenen, Savannen, Wüsten, Taigas und Tundren sind typische Dorf-Biome.",
+    "Ozeanmonumente erscheinen in tiefen Ozeanen. Kartografen-Dorfbewohner verkaufen Forscherkarten dafür.",
+    "Prüfe große Höhleneingänge auf Tuff- und Kupferblöcke. Das sind typische Hinweise auf eine Prüfungskammer.",
+    "Gebirge (Zerklüftete Gipfel, Schneehänge) sind Smaragd- und Eisenquellen. Dort gibt es auch Ziegen und Pulverschnee.",
+    "Mangrovensümpfe und Sümpfe: Hexenhütten, Frösche und Lehm. Dunkle Eichenwälder können Waldanwesen beherbergen.",
+    "Wüsten: Wüstentempel (TNT-Falle unter der Mitte!) und verdächtiger Sand mit Archäologie-Loot.",
+    "Der Blasse Garten (Pale Garden) ist gefährlich. Der Knarz (Creaking) kann nur durch Zerstören seines Knarzherzens besiegt werden."
+  ];
+
+  const TIPS = [
+    "Bedrock-Seeds sind 32-Bit-Zahlen. Gleicher Seed + gleiche Version = gleiche Welt, auch auf Konsole, Handy und PC.",
+    "Archäologie: Verdächtiger Sand/Kies bei Wüstenbrunnen, Trail Ruins und Ozeanruinen liefert Töpferscherben und Rüstungsbesätze.",
+    "Ancient Cities liegen im Deep Dark auf etwa Y −51. Schleichen vermeidet Skulk-Sensoren, Wolle dämpft Vibrationen.",
+    "Ein Nether-Portal in der Nähe deiner Basis spart massig Zeit. Rechne mit dem Nether-Rechner unten.",
+    "Kartografen-Dorfbewohner verkaufen Forscherkarten (u. a. Waldanwesen, Ozeanmonument, Prüfungskammer) gegen Smaragde.",
+    "Ein Bibliothekar-Dorfbewohner mit Reparatur (Mending) ist der wertvollste Handel. Mit Lesepult-Rerolls findest du sie schnell.",
+    "Im Nether sind Goldrüstungsteile Pflicht, damit Piglins dich nicht angreifen. Ein Teil reicht.",
+    "Schwere Kerne (Heavy Core) und Windladungen gibt es in Prüfungskammern. Daraus entsteht der Streitkolben (Mace).",
+    "Elytren findest du nur in Endschiffen der Endstädte, hinter dem Endtor-Gateway auf den äußeren End-Inseln.",
+    "Grabe nie direkt nach unten. Höhlen, Lava und Ancient-City-Abgründe sind tiefer als früher."
+  ];
+
+  const PLAN = [
+    "Eisenwerkzeuge & Schild",
+    "Dorf gefunden",
+    "Erste Diamanten (Y −58)",
+    "Nether-Portal gebaut",
+    "Nether-Festung gefunden (Lohenruten)",
+    "Bastion geplündert",
+    "Prüfungskammer abgeschlossen",
+    "Stronghold gepeilt & gefunden",
+    "Enderdrache besiegt",
+    "Elytra gefunden"
+  ];
+
+  let currentSeed = null;
+  let tipOrder = [];
+  let tipIndex = 0;
+
+  function seedInfo(seed) {
+    const chips = [];
+    if (/^-?\d+$/.test(seed)) {
+      const n = Number(seed);
+      chips.push({ t: "Zahlen-Seed" });
+      if (n < -2147483648 || n > 4294967295) {
+        chips.push({ t: "Außerhalb 32 Bit: Bedrock kürzt diesen Wert, die Welt kann abweichen", warn: true });
+      } else if (n > 2147483647) {
+        chips.push({ t: "Als Signed-Wert: " + (n - 4294967296) });
+      }
+    } else {
+      chips.push({ t: "Text-Seed: wird vom Spiel in eine Zahl umgewandelt", warn: false });
+    }
+    chips.push({ t: "Länge: " + seed.length + " Zeichen" });
+    return chips;
+  }
+
+  function renderPlan() {
+    const key = "bwh-plan-" + currentSeed;
+    const done = store.get(key, []);
+    $("planList").innerHTML = PLAN.map((p, i) => {
+      const checked = done.includes(i);
+      return '<label class="plan-step' + (checked ? " done" : "") + '" style="color:var(--text);font-weight:400;margin:0">' +
+        '<input type="checkbox" data-i="' + i + '"' + (checked ? " checked" : "") + '><span>' + esc(p) + "</span></label>";
+    }).join("");
+    const pct = Math.round((done.length / PLAN.length) * 100);
+    $("progressBar").style.width = pct + "%";
+    $("progressText").textContent = done.length + " von " + PLAN.length + " Meilensteinen (" + pct + " %)";
+  }
+
+  $("planList").addEventListener("change", (e) => {
+    if (!e.target.matches("input[type=checkbox]")) return;
+    const key = "bwh-plan-" + currentSeed;
+    const i = Number(e.target.dataset.i);
+    let done = store.get(key, []).filter((x) => x !== i);
+    if (e.target.checked) done.push(i);
+    store.set(key, done);
+    renderPlan();
+  });
+
+  function loadSeed(seed) {
+    currentSeed = seed;
+    const rnd = mulberry32(hashString(seed));
+    $("seedMeta").innerHTML = '<span class="chip">Seed: ' + esc(seed) + "</span>" +
+      seedInfo(seed).map((c) => '<span class="chip' + (c.warn ? " warn" : "") + '">' + esc(c.t) + "</span>").join("");
+    $("firstSteps").innerHTML = FIRST_STEPS.map((s) => "<li>" + esc(s) + "</li>").join("");
+    $("strategyList").innerHTML = shuffle(STRATEGIES, rnd).slice(0, 5).map((s) => "<li>" + esc(s) + "</li>").join("");
+    tipOrder = shuffle(TIPS, rnd);
+    tipIndex = 0;
+    $("seedTip").textContent = tipOrder[0];
+    renderPlan();
+    $("dashboard").hidden = false;
+    store.set("bwh-seed", seed);
+  }
+
+  $("seedForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const seed = $("seedInput").value.trim();
+    if (!seed) {
+      $("seedMeta").innerHTML = '<span class="chip warn">Bitte einen Seed eingeben (in Bedrock: Einstellungen → Spiel → Seed).</span>';
+      return;
+    }
+    loadSeed(seed);
+  });
+  $("seedClear").addEventListener("click", () => {
+    $("seedInput").value = "";
+    $("seedMeta").innerHTML = "";
+    $("dashboard").hidden = true;
+    store.remove("bwh-seed");
+    currentSeed = null;
+  });
+  $("nextTip").addEventListener("click", () => {
+    if (!tipOrder.length) return;
+    tipIndex = (tipIndex + 1) % tipOrder.length;
+    $("seedTip").textContent = tipOrder[tipIndex];
+  });
+
+  const savedSeed = store.get("bwh-seed", null);
+  if (savedSeed) { $("seedInput").value = savedSeed; loadSeed(savedSeed); }
+
+  /* ======================================================================
+     2. ORES
+     ====================================================================== */
+  const Y_MIN = -64, Y_MAX = 320;
+  const ORES = [
+    { name: "Diamant", color: "#4fd8d0", from: -64, to: 16, peak: -58, best: "Y −58 (−64 bis −50)",
+      note: "Häufigkeit steigt nach unten. Bedrock ab Y −60 stört, darum ist Y −58 der Sweet Spot. Große Adern (bis 8+) vor allem tief unten." },
+    { name: "Redstone", color: "#e0443a", from: -64, to: 15, peak: -58, best: "Y −58 (−64 bis −32)",
+      note: "Fällt beim Diamant-Strip-Mining auf derselben Höhe nebenbei in Mengen an." },
+    { name: "Lapislazuli", color: "#2f5bd3", from: -64, to: 64, peak: 0, best: "Y 0 (−32 bis 32)",
+      note: "Verteilungsspitze um Y 0, zusätzlich gleichmäßig verteilt bis Y 64, dort aber nur ohne Luftkontakt." },
+    { name: "Gold", color: "#f2c744", from: -64, to: 32, peak: -16, best: "Y −16",
+      note: "In Tafelberg-Biomen (Badlands) zusätzlich reichlich von Y 32 bis 256, auch an der Oberfläche." },
+    { name: "Eisen", color: "#d8af93", from: -64, to: 320, peak: 16, best: "Y 16 oder Y 232",
+      note: "Zwei Spitzen: Y 16 im Untergrund und Y 232 in hohen Bergen. Riesige Eisenadern im Deepslate (Y −60 bis −8)." },
+    { name: "Kupfer", color: "#e07b4b", from: -16, to: 112, peak: 48, best: "Y 48",
+      note: "In Tropfsteinhöhlen (Dripstone Caves) deutlich häufiger. Riesige Kupferadern zwischen Y 0 und 50." },
+    { name: "Kohle", color: "#3a3a3a", from: 0, to: 320, peak: 96, best: "Y 96 oder Y 136",
+      note: "Sehr häufig in Berghängen. Unter Y 0 gibt es keine Kohle mehr." },
+    { name: "Smaragd", color: "#29c25a", from: -16, to: 320, peak: 232, best: "Y 232 (nur Gebirge)",
+      note: "Nur in Gebirgs-Biomen, Einzelerze. Je höher, desto häufiger." },
+    { name: "Antiker Schrott (Nether)", color: "#6b4a3a", from: 8, to: 119, peak: 15, best: "Nether Y 15 (8–22)",
+      note: "Nether-Höhe. Nie an Luft. Explosionsresistent, darum mit Betten/TNT freilegen." },
+    { name: "Netherquarz (Nether)", color: "#eae3d6", from: 10, to: 117, peak: 64, best: "Nether Y 10–117",
+      note: "Gleichmäßig verteilt, in Basaltdeltas besonders häufig." }
+  ];
+
+  const pos = (y) => ((y - Y_MIN) / (Y_MAX - Y_MIN)) * 100;
+  $("oreList").innerHTML = ORES.map((o) => {
+    const left = pos(o.from), width = pos(o.to) - left;
+    return '<div class="ore">' +
+      '<div><div class="ore-name"><span class="swatch" style="background:' + o.color + '"></span>' + esc(o.name) + '</div>' +
+      '<div class="ore-best">' + esc(o.best) + "</div></div>" +
+      '<div><div class="bar" title="' + esc(o.name + ": Y " + o.from + " bis " + o.to) + '">' +
+      '<div class="range" style="left:' + left + "%;width:" + width + "%;background:" + o.color + '"></div>' +
+      '<div class="peak" style="left:calc(' + pos(o.peak) + '% - 2px)"></div></div>' +
+      '<div class="bar-scale"><span>−64</span><span>0</span><span>64</span><span>128</span><span>192</span><span>256</span><span>320</span></div></div>' +
+      '<div class="ore-note">' + esc(o.note) + "</div></div>";
+  }).join("");
+
+  /* ======================================================================
+     3. STRONGHOLD TRIANGULATION
+     ====================================================================== */
+  const triIds = ["t1x", "t1z", "t1x2", "t1z2", "t2x", "t2z", "t2x2", "t2z2"];
+  const canvas = $("triCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function readTri() {
+    const v = {};
+    for (const id of triIds) {
+      const raw = $(id).value.trim();
+      if (raw === "" || isNaN(Number(raw))) return null;
+      v[id] = Number(raw);
+    }
+    return v;
+  }
+
+  function intersect(v) {
+    // Line 1: P1 + t*d1, Line 2: P2 + s*d2
+    const d1x = v.t1x2 - v.t1x, d1z = v.t1z2 - v.t1z;
+    const d2x = v.t2x2 - v.t2x, d2z = v.t2z2 - v.t2z;
+    if ((d1x === 0 && d1z === 0) || (d2x === 0 && d2z === 0)) return { error: "Standort und Auge-Punkt dürfen nicht identisch sein." };
+    const denom = d1x * d2z - d1z * d2x;
+    const len1 = Math.hypot(d1x, d1z), len2 = Math.hypot(d2x, d2z);
+    const sinAngle = Math.abs(denom) / (len1 * len2);
+    if (sinAngle < 0.02) return { error: "Die beiden Wurflinien sind (fast) parallel. Gehe für den zweiten Wurf weiter seitlich." };
+    const ex = v.t2x - v.t1x, ez = v.t2z - v.t1z;
+    const t = (ex * d2z - ez * d2x) / denom;
+    const s = (ex * d1z - ez * d1x) / denom;
+    const x = v.t1x + t * d1x, z = v.t1z + t * d1z;
+    return { x, z, t, s, angle: Math.asin(Math.min(1, sinAngle)) * 180 / Math.PI };
+  }
+
+  function drawTri(v, r) {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#0d0f12"; ctx.fillRect(0, 0, W, H);
+    if (!v) {
+      ctx.fillStyle = "#9aa1ad"; ctx.font = "16px system-ui"; ctx.textAlign = "center";
+      ctx.fillText("Skizze erscheint nach der Berechnung", W / 2, H / 2);
+      return;
+    }
+    const pts = [[v.t1x, v.t1z], [v.t2x, v.t2z], [v.t1x2, v.t1z2], [v.t2x2, v.t2z2]];
+    if (r && !r.error) pts.push([r.x, r.z]);
+    let minX = Math.min(...pts.map((p) => p[0])), maxX = Math.max(...pts.map((p) => p[0]));
+    let minZ = Math.min(...pts.map((p) => p[1])), maxZ = Math.max(...pts.map((p) => p[1]));
+    const span = Math.max(maxX - minX, maxZ - minZ, 50);
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    const scale = Math.min(W, H) * 0.8 / span;
+    const toC = (x, z) => [W / 2 + (x - cx) * scale, H / 2 + (z - cz) * scale]; // +Z = down (south), like the in-game map
+
+    // grid
+    ctx.strokeStyle = "#1f242c"; ctx.lineWidth = 1;
+    for (let i = 0; i <= W; i += 30) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke(); }
+    for (let i = 0; i <= H; i += 30) { ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(W, i); ctx.stroke(); }
+
+    const ray = (x1, z1, x2, z2, color) => {
+      const [a, b] = toC(x1, z1), [c, d] = toC(x2, z2);
+      const dx = c - a, dy = d - b, L = Math.hypot(dx, dy) || 1;
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(a, b); ctx.lineTo(a + dx / L * 2000, b + dy / L * 2000); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = color; ctx.fillRect(a - 5, b - 5, 10, 10);
+    };
+    ray(v.t1x, v.t1z, v.t1x2, v.t1z2, "#4fd8d0");
+    ray(v.t2x, v.t2z, v.t2x2, v.t2z2, "#f2c744");
+
+    if (r && !r.error) {
+      const [px, py] = toC(r.x, r.z);
+      ctx.fillStyle = "#b48ce8";
+      ctx.beginPath(); ctx.arc(px, py, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#e8e6e1"; ctx.font = "bold 14px system-ui"; ctx.textAlign = "left";
+      ctx.fillText("Stronghold ~", Math.min(px + 14, W - 110), Math.max(py - 10, 16));
+    }
+    ctx.fillStyle = "#9aa1ad"; ctx.font = "12px system-ui"; ctx.textAlign = "left";
+    ctx.fillText("N ↑ (−Z)   S ↓ (+Z)   O → (+X)", 10, H - 10);
+  }
+
+  function calcTri() {
+    const v = readTri();
+    const out = $("triResult");
+    if (!v) {
+      out.className = "result error";
+      out.innerHTML = '<div class="big">Bitte alle 8 Felder mit Zahlen ausfüllen.</div>';
+      drawTri(null);
+      return;
+    }
+    const r = intersect(v);
+    if (r.error) {
+      out.className = "result error";
+      out.innerHTML = '<div class="big">' + esc(r.error) + "</div>";
+      drawTri(v, r);
+      return;
+    }
+    out.className = "result end";
+    if (r.t < 0 || r.s < 0) {
+      out.className = "result error";
+      out.innerHTML = '<div class="big">Die Linien schneiden sich hinter dir. Prüfe, ob Standort und Auge-Punkt vertauscht sind.</div>';
+      drawTri(v, r);
+      return;
+    }
+    const x = Math.round(r.x), z = Math.round(r.z);
+    const dist = Math.round(Math.hypot(r.x - v.t2x, r.z - v.t2z));
+    const quality = r.angle >= 30 ? "gut" : r.angle >= 12 ? "okay" : "ungenau, mehr seitlicher Abstand empfohlen";
+    out.innerHTML =
+      '<div class="muted small">Geschätzte Stronghold-Position (Oberwelt)</div>' +
+      '<div class="big">X ' + x + " · Z " + z + "</div>" +
+      '<div class="small" style="margin-top:6px">Entfernung vom 2. Wurf: ~' + dist + " Blöcke · Schnittwinkel " + r.angle.toFixed(1) + "° (" + quality + ")</div>" +
+      '<div class="small">Über den Nether: X ' + Math.floor(x / 8) + " · Z " + Math.floor(z / 8) + " (" + Math.round(dist / 8) + " Nether-Blöcke)</div>" +
+      '<div class="small muted" style="margin-top:6px">Rechne mit ±20–50 Blöcken Abweichung. Vor Ort erneut werfen.</div>';
+    drawTri(v, r);
+  }
+
+  $("triCalc").addEventListener("click", calcTri);
+  $("triDemo").addEventListener("click", () => {
+    const demo = { t1x: 100, t1z: 200, t1x2: 115, t1z2: 180, t2x: 450, t2z: 260, t2x2: 440, t2z2: 236 };
+    for (const k in demo) $(k).value = demo[k];
+    calcTri();
+  });
+  drawTri(null);
+
+  /* ======================================================================
+     4. STRUCTURES
+     ====================================================================== */
+  const STRUCTS = [
+    {
+      id: "trial", label: "⚔️ Prüfungskammern",
+      html:
+        "<p><b>Trial Chambers</b> sind große unterirdische Anlagen aus Kupfer und Tuff mit Prüfungs-Spawnern und Tresoren (Vaults). Sie generieren tief im Untergrund, meist im Bereich <b>Y −40 bis −20</b>.</p>" +
+        "<ul>" +
+        "<li><b>Erkennen:</b> Tuffziegel, gemeißeltes Kupfer, Kupfergitter und Kupferglühbirnen in Höhlenwänden sind ein sicheres Zeichen.</li>" +
+        "<li><b>Forscherkarte:</b> Kartografen (Gesellen-Stufe) verkaufen eine <i>Prüfungsforscherkarte</i>. Das ist der schnellste Weg.</li>" +
+        "<li><b>Suche in Höhlen:</b> Laufe große Höhlensysteme auf Y −30 ab. Kammern schneiden oft in Höhlen hinein.</li>" +
+        "<li><b>Belohnungen:</b> Prüfungsschlüssel öffnen Tresore, Unheilvolle Schlüssel die unheilvollen Tresore (mit Schwerem Kern). Breeze liefern Breeze-Ruten für Windladungen und den Streitkolben.</li>" +
+        "<li><b>Unheilvolle Prüfung:</b> Mit dem Effekt <i>Unheilvolles Omen</i> (aus unheilvollen Flaschen) werden Spawner schwerer und lohnender.</li>" +
+        "</ul>"
+    },
+    {
+      id: "village", label: "🏘️ Dörfer",
+      html:
+        "<p>Dörfer erscheinen in <b>Ebenen, Savannen, Wüsten, Taigas, verschneiten Ebenen</b> und Sonnenblumenebenen. In Bedrock gibt es sie zudem häufiger dicht beieinander.</p>" +
+        "<ul>" +
+        "<li><b>Von oben suchen:</b> Klettere auf einen Berg oder baue einen Turm. Glockentürme, Dächer und Felder sind von weitem sichtbar.</li>" +
+        "<li><b>Flüsse entlang:</b> Dörfer liegen gern an Flachland neben Flüssen, die als natürliche Wege dienen.</li>" +
+        "<li><b>Nutzen:</b> Bett, Nahrung, Schmied-Truhen (Eisen, Diamanten möglich) und später Handel.</li>" +
+        "<li><b>Strongholds:</b> In Bedrock befinden sich Strongholds oft in Dorfnähe. Wirf ein Enderauge, sobald du eins hast.</li>" +
+        "<li><b>Achtung:</b> Zombie-Dörfer (ca. 2 %) und Plünderer-Außenposten in der Nähe.</li>" +
+        "</ul>"
+    },
+    {
+      id: "fortress", label: "🔥 Nether-Festungen",
+      html:
+        "<p>Nether-Festungen bestehen aus Netherziegeln und liefern <b>Lohenruten</b> (für Enderaugen &amp; Braustände) sowie Netherwarzen und Witherskelett-Schädel.</p>" +
+        "<ul>" +
+        "<li><b>Biom:</b> Am häufigsten in <b>Nether-Ödnis</b> und <b>Seelensandtal</b>. Kein Kontakt zu Basaltdeltas nötig.</li>" +
+        "<li><b>Großflächig suchen:</b> Festungen sind lang gestreckt. Baue eine Brücke oder fliege und schau über große Lavaseen. Die dunklen Brücken sind weit sichtbar.</li>" +
+        "<li><b>Richtungs-Tipp:</b> Festungen und Bastionen entstehen in Regionen mit festem Raster. Wenn du eine Bastion findest, ist die nächste Festung meist ein paar hundert Blöcke entfernt.</li>" +
+        "<li><b>Lohen-Spawner:</b> Mit Bruchsteinwand + Schneebällen/Bogen sicher farmen. Feuerresistenz-Trank mitnehmen.</li>" +
+        "</ul>"
+    },
+    {
+      id: "bastion", label: "🐷 Bastionen",
+      html:
+        "<p>Bastionsruinen sind riesige Schwarzstein-Bauten voller Piglins. Sie enthalten <b>Goldblöcke, Antiken Schrott, Netherit-Aufwertungsvorlagen</b> und den Rüstungsbesatz „Schnauze“.</p>" +
+        "<ul>" +
+        "<li><b>Biome:</b> Alle Nether-Biome außer <b>Basaltdeltas</b>.</li>" +
+        "<li><b>Erkennen:</b> Massive schwarze Mauern aus Schwarzstein und vergoldetem Schwarzstein.</li>" +
+        "<li><b>Typen:</b> Brücke, Schweinestall (Hoglins!), Wohnquartier, Schatzkammer. Die Schatzkammer hat den besten Loot, aber einen Magmawürfel-Spawner.</li>" +
+        "<li><b>Sicherheit:</b> Goldrüstung tragen, keine Goldblöcke abbauen und keine Truhen öffnen, wenn Piglins zusehen. Piglin-Brutes greifen immer an.</li>" +
+        "</ul>"
+    },
+    {
+      id: "more", label: "🏛️ Weitere",
+      html:
+        '<div class="table-scroll"><table>' +
+        "<thead><tr><th>Bauwerk</th><th>Wo / Höhe</th><th>Schnell finden</th></tr></thead><tbody>" +
+        "<tr><td>Ancient City</td><td class='mono'>Deep Dark, Y ≈ −51</td><td>Unter Bergen im Deep Dark suchen. Skulk an Höhlenwänden ist ein Hinweis. Schleichen!</td></tr>" +
+        "<tr><td>Ozeanmonument</td><td>Tiefer Ozean</td><td>Forscherkarte vom Kartografen. Tränke der Unterwasseratmung und Nachtsicht mitnehmen.</td></tr>" +
+        "<tr><td>Waldanwesen</td><td>Dunkler Eichenwald</td><td>Forscherkarte vom Kartografen (Meister-Stufe). Totems der Unsterblichkeit von Magiern.</td></tr>" +
+        "<tr><td>Trail Ruins</td><td>Taiga, Dschungel, Birkenwald</td><td>Nur Dachspitzen schauen aus dem Boden. Pinsel für verdächtigen Kies mitnehmen.</td></tr>" +
+        "<tr><td>Alte Stätte (Mineshaft)</td><td class='mono'>Y −60 bis 40</td><td>Holzstützen und Schienen in Höhlen. In Tafelbergen auch an der Oberfläche.</td></tr>" +
+        "<tr><td>Endstadt</td><td>Äußere End-Inseln</td><td>Nach dem Drachen ein Endtor-Gateway mit Enderperle durchqueren. Endschiffe = Elytra.</td></tr>" +
+        "<tr><td>Pale Garden</td><td>Variante des dunklen Eichenwalds</td><td>Blasse Eichen und Blassmoos. Nachts erscheint der Knarz. Knarzherz im Baumstamm zerstören.</td></tr>" +
+        "</tbody></table></div>"
+    }
+  ];
+
+  const tabsEl = $("structTabs"), panelsEl = $("structPanels");
+  tabsEl.innerHTML = STRUCTS.map((s, i) =>
+    '<button class="tab" role="tab" id="tab-' + s.id + '" aria-controls="panel-' + s.id + '" aria-selected="' + (i === 0) + '" tabindex="' + (i === 0 ? 0 : -1) + '">' + s.label + "</button>"
+  ).join("");
+  panelsEl.innerHTML = STRUCTS.map((s, i) =>
+    '<div class="tabpanel" role="tabpanel" id="panel-' + s.id + '" aria-labelledby="tab-' + s.id + '"' + (i === 0 ? "" : " hidden") + ">" + s.html + "</div>"
+  ).join("");
+
+  function selectTab(id) {
+    STRUCTS.forEach((s) => {
+      const on = s.id === id;
+      const t = $("tab-" + s.id);
+      t.setAttribute("aria-selected", on);
+      t.tabIndex = on ? 0 : -1;
+      $("panel-" + s.id).hidden = !on;
+    });
+    store.set("bwh-tab", id);
+  }
+  tabsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".tab");
+    if (btn) selectTab(btn.id.replace("tab-", ""));
+  });
+  tabsEl.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+    const idx = STRUCTS.findIndex((s) => $("tab-" + s.id).getAttribute("aria-selected") === "true");
+    const next = STRUCTS[(idx + (e.key === "ArrowRight" ? 1 : -1) + STRUCTS.length) % STRUCTS.length];
+    selectTab(next.id);
+    $("tab-" + next.id).focus();
+  });
+  const savedTab = store.get("bwh-tab", null);
+  if (savedTab && STRUCTS.some((s) => s.id === savedTab)) selectTab(savedTab);
+
+  /* ======================================================================
+     5. NETHER CALCULATOR
+     ====================================================================== */
+  const owX = $("owX"), owZ = $("owZ"), nX = $("nX"), nZ = $("nZ");
+  const netherOut = $("netherResult");
+  let lastNetherText = "";
+
+  const num = (el) => {
+    const raw = el.value.trim();
+    return raw === "" || isNaN(Number(raw)) ? null : Number(raw);
+  };
+
+  function showNether(source) {
+    const ox = num(owX), oz = num(owZ), nx = num(nX), nz = num(nZ);
+    if (source === "ow") {
+      nX.value = ox === null ? "" : Math.floor(ox / 8);
+      nZ.value = oz === null ? "" : Math.floor(oz / 8);
+    } else {
+      owX.value = nx === null ? "" : Math.round(nx * 8);
+      owZ.value = nz === null ? "" : Math.round(nz * 8);
+    }
+    const a = [num(owX), num(owZ)], b = [num(nX), num(nZ)];
+    if (a[0] === null && a[1] === null) {
+      netherOut.className = "result nether";
+      netherOut.innerHTML = '<div class="muted small">Gib Koordinaten ein.</div>';
+      lastNetherText = "";
+      return;
+    }
+    const f = (v) => (v === null ? "–" : v);
+    const owDist = a[0] !== null && a[1] !== null ? Math.round(Math.hypot(a[0], a[1])) : null;
+    lastNetherText = "Oberwelt X " + f(a[0]) + " Z " + f(a[1]) + "  ↔  Nether X " + f(b[0]) + " Z " + f(b[1]);
+    netherOut.className = "result nether";
+    netherOut.innerHTML =
+      '<div class="muted small">' + (source === "ow" ? "Baue dein Nether-Portal bei" : "Baue dein Oberwelt-Portal bei") + "</div>" +
+      '<div class="big">' + (source === "ow" ? "X " + f(b[0]) + " · Z " + f(b[1]) : "X " + f(a[0]) + " · Z " + f(a[1])) + "</div>" +
+      (owDist !== null ? '<div class="small" style="margin-top:6px">Entfernung zum Ursprung: ' + owDist + " Blöcke Oberwelt = " + Math.round(owDist / 8) + " Blöcke im Nether</div>" : "") +
+      '<div class="small muted">Y-Höhe frei wählbar. Nether-Werte sind abgerundet (wie im Spiel).</div>';
+  }
+
+  [owX, owZ].forEach((el) => el.addEventListener("input", () => showNether("ow")));
+  [nX, nZ].forEach((el) => el.addEventListener("input", () => showNether("n")));
+  $("netherReset").addEventListener("click", () => {
+    [owX, owZ, nX, nZ].forEach((el) => (el.value = ""));
+    showNether("ow");
+  });
+  $("netherCopy").addEventListener("click", async () => {
+    const btn = $("netherCopy");
+    if (!lastNetherText) return;
+    try {
+      await navigator.clipboard.writeText(lastNetherText);
+      btn.textContent = "Kopiert ✓";
+    } catch (e) {
+      btn.textContent = "Kopieren nicht möglich";
+    }
+    setTimeout(() => (btn.textContent = "Ergebnis kopieren"), 1500);
+  });
+})();
+</script>
+</body>
+</html>
