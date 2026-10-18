@@ -230,6 +230,55 @@
   .table-scroll { overflow-x: auto; }
 
   footer { border-top: 2px solid var(--line); padding: 20px 0 40px; color: var(--muted); font-size: .85rem; }
+
+  /* Seed map */
+  select {
+    width: 100%;
+    background: #0d0f12; color: var(--text);
+    border: 2px solid var(--line); border-radius: 4px;
+    padding: 9px 10px; font: inherit; font-size: .95rem;
+  }
+  select:focus { border-color: var(--grass); outline: none; }
+  .map-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .seg { display: inline-flex; border: 2px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button {
+    cursor: pointer; font: inherit; font-weight: 600; font-size: .9rem;
+    color: var(--text); background: var(--card); border: 0; padding: 8px 12px;
+  }
+  .seg button + button { border-left: 2px solid var(--line); }
+  .seg button[aria-pressed="true"] { background: #2b3a25; color: #fff; }
+  .seg button.nether[aria-pressed="true"] { background: #4a1f17; }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; color: var(--text); font-weight: 600; margin: 0; cursor: pointer; }
+  .check input { width: 18px; height: 18px; accent-color: var(--grass); }
+  .map-toolbar .spacer { flex: 1 1 auto; }
+  .map-wrap { position: relative; border: 2px solid var(--line); border-radius: 4px; overflow: hidden; background: #0d0f12; }
+  #mapCanvas { display: block; width: 100%; height: min(70vh, 560px); min-height: 340px; margin: 0; border: 0; border-radius: 0; touch-action: none; cursor: grab; }
+  #mapCanvas.dragging { cursor: grabbing; }
+  .map-ctrl { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .map-ctrl button {
+    width: 40px; height: 40px; cursor: pointer;
+    font-size: 1.2rem; font-weight: 700; color: var(--text);
+    background: #23272fee; border: 2px solid var(--line); border-radius: 4px;
+  }
+  .map-ctrl button:hover { border-color: var(--grass); }
+  .map-readout {
+    position: absolute; left: 8px; bottom: 8px; right: 60px;
+    display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
+  }
+  .map-readout span { font-family: var(--mono); font-size: .78rem; background: #0d0f12e6; border: 1px solid var(--line); border-radius: 3px; padding: 3px 7px; }
+  .map-info { margin-top: 10px; min-height: 1.5em; font-size: .9rem; }
+  .marker-list { display: grid; gap: 8px; max-height: 360px; overflow-y: auto; }
+  .marker-item {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px;
+  }
+  .marker-item .mi-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 3px; flex: 0 0 auto; box-shadow: inset -3px -3px 0 #0006; }
+  .marker-item .mi-text { flex: 1 1 auto; min-width: 0; }
+  .marker-item .mi-text b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .marker-item .mi-text span { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+  .icon-btn { cursor: pointer; background: #0d0f12; color: var(--text); border: 1px solid var(--line); border-radius: 3px; padding: 6px 9px; font: inherit; font-size: .85rem; }
+  .icon-btn:hover { border-color: var(--grass); }
+  .icon-btn.danger:hover { border-color: var(--redstone); color: var(--redstone); }
 </style>
 </head>
 <body>
@@ -238,13 +287,14 @@
   <div class="wrap">
     <h1>⛏️ Bedrock Welt-Helfer</h1>
     <p>Seed-Dashboard, Erz-Höhen, Stronghold-Peilung &amp; Nether-Rechner</p>
-    <span class="badge">Minecraft Bedrock Edition · Welthöhe Y −64 bis 320</span>
+    <span class="badge">Minecraft Bedrock Edition 26.x · Welthöhe Y −64 bis 320</span>
   </div>
 </header>
 
 <nav aria-label="Bereiche">
   <div class="wrap">
     <a href="#seed">🌱 Seed</a>
+    <a href="#map">🗺️ Karte</a>
     <a href="#ores">💎 Erze</a>
     <a href="#stronghold">👁️ Endportal</a>
     <a href="#structures">🏰 Bauwerke</a>
@@ -290,6 +340,65 @@
         <h3>💡 Tipp für diesen Seed</h3>
         <p id="seedTip"></p>
         <button class="btn secondary" type="button" id="nextTip">Nächster Tipp</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEED MAP -->
+  <section id="map">
+    <h2><span class="icon" style="background:#2f5bd3">🗺️</span>Seed-Karte</h2>
+    <div class="card accent-diamond">
+      <div class="map-toolbar">
+        <div class="seg" role="group" aria-label="Dimension">
+          <button type="button" id="dimOw" aria-pressed="true">🌍 Oberwelt</button>
+          <button type="button" id="dimNether" class="nether" aria-pressed="false">🔥 Nether</button>
+        </div>
+        <label class="check"><input type="checkbox" id="chunkGrid">Chunk-Raster</label>
+        <span class="spacer"></span>
+        <button class="btn" type="button" id="openChunkbase">🧭 Biome &amp; Bauwerke in Chunkbase</button>
+      </div>
+      <div class="map-wrap">
+        <canvas id="mapCanvas" aria-label="Karte mit deinen Markern"></canvas>
+        <div class="map-ctrl">
+          <button type="button" id="zoomIn" aria-label="Hineinzoomen">+</button>
+          <button type="button" id="zoomOut" aria-label="Herauszoomen">−</button>
+          <button type="button" id="zoomHome" aria-label="Zum Ursprung">⌖</button>
+        </div>
+        <div class="map-readout"><span id="mapCursor">X: – Z: –</span><span id="mapScale"></span></div>
+      </div>
+      <div class="row" style="margin-top:12px;align-items:flex-end">
+        <div><label for="gotoX">X</label><input type="number" id="gotoX" inputmode="numeric"></div>
+        <div><label for="gotoZ">Z</label><input type="number" id="gotoZ" inputmode="numeric"></div>
+        <div style="flex:0 0 auto"><button class="btn secondary" type="button" id="gotoBtn">Gehe zu</button></div>
+      </div>
+      <div class="map-info muted" id="mapInfo">Ziehen zum Verschieben, Mausrad oder zwei Finger zum Zoomen. Tippe auf die Karte, um die Koordinaten ins Marker-Formular zu übernehmen.</div>
+      <div class="callout info">
+        Die genaue Lage von Biomen und Bauwerken lässt sich nur mit Minecrafts kompletter Weltgenerierung berechnen. Dafür öffnet der Button oben deinen Seed direkt in Chunkbase (dort Version auf <b>Bedrock</b> stellen). Diese Karte zeigt <b>deine eigenen Funde</b>: Trag sie ein und sie werden pro Seed gespeichert und automatisch zwischen Oberwelt und Nether umgerechnet.
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card accent-grass">
+        <h3>📍 Marker setzen</h3>
+        <div class="row">
+          <div><label for="mkName">Name</label><input type="text" id="mkName" maxlength="40" placeholder="z. B. Hauptbasis"></div>
+          <div><label for="mkType">Typ</label><select id="mkType"></select></div>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div><label for="mkX">X</label><input type="number" id="mkX" inputmode="numeric"></div>
+          <div><label for="mkZ">Z</label><input type="number" id="mkZ" inputmode="numeric"></div>
+          <div><label for="mkDim">Gemessen in</label>
+            <select id="mkDim"><option value="overworld">Oberwelt</option><option value="nether">Nether</option></select>
+          </div>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="btn" type="button" id="mkAdd">Marker hinzufügen</button>
+        </div>
+        <p class="muted small" id="mkMsg" style="margin-top:8px"></p>
+      </div>
+      <div class="card accent-gold">
+        <h3>🗂️ Deine Marker <span class="muted small" id="mkSeedLabel"></span></h3>
+        <div class="marker-list" id="markerList"></div>
       </div>
     </div>
   </section>
@@ -531,7 +640,7 @@
   ];
 
   const TIPS = [
-    "Bedrock-Seeds sind 32-Bit-Zahlen. Gleicher Seed + gleiche Version = gleiche Welt, auch auf Konsole, Handy und PC.",
+    "Bedrock-Seeds sind heute 64-Bit-Zahlen. Gleicher Seed + gleiche Version = gleiche Welt, auch auf Konsole, Handy und PC.",
     "Archäologie: Verdächtiger Sand/Kies bei Wüstenbrunnen, Trail Ruins und Ozeanruinen liefert Töpferscherben und Rüstungsbesätze.",
     "Ancient Cities liegen im Deep Dark auf etwa Y −51. Schleichen vermeidet Skulk-Sensoren, Wolle dämpft Vibrationen.",
     "Ein Nether-Portal in der Nähe deiner Basis spart massig Zeit. Rechne mit dem Nether-Rechner unten.",
@@ -557,18 +666,21 @@
   ];
 
   let currentSeed = null;
+  const seedListeners = [];
+  const notifySeed = () => seedListeners.forEach((fn) => fn(currentSeed));
   let tipOrder = [];
   let tipIndex = 0;
 
   function seedInfo(seed) {
     const chips = [];
     if (/^-?\d+$/.test(seed)) {
-      const n = Number(seed);
-      chips.push({ t: "Zahlen-Seed" });
-      if (n < -2147483648 || n > 4294967295) {
-        chips.push({ t: "Außerhalb 32 Bit: Bedrock kürzt diesen Wert, die Welt kann abweichen", warn: true });
-      } else if (n > 2147483647) {
-        chips.push({ t: "Als Signed-Wert: " + (n - 4294967296) });
+      const n = BigInt(seed);
+      const two64 = BigInt("18446744073709551616"), two63 = BigInt("9223372036854775808");
+      chips.push({ t: "Zahlen-Seed (64 Bit)" });
+      if (n < -two63 || n >= two64) {
+        chips.push({ t: "Außerhalb 64 Bit: das Spiel kürzt diesen Wert, die Welt kann abweichen", warn: true });
+      } else if (n >= two63) {
+        chips.push({ t: "Als Signed-Wert: " + (n - two64) });
       }
     } else {
       chips.push({ t: "Text-Seed: wird vom Spiel in eine Zahl umgewandelt", warn: false });
@@ -613,6 +725,7 @@
     renderPlan();
     $("dashboard").hidden = false;
     store.set("bwh-seed", seed);
+    notifySeed();
   }
 
   $("seedForm").addEventListener("submit", (e) => {
@@ -630,6 +743,7 @@
     $("dashboard").hidden = true;
     store.remove("bwh-seed");
     currentSeed = null;
+    notifySeed();
   });
   $("nextTip").addEventListener("click", () => {
     if (!tipOrder.length) return;
@@ -790,9 +904,17 @@
       '<div class="big">X ' + x + " · Z " + z + "</div>" +
       '<div class="small" style="margin-top:6px">Entfernung vom 2. Wurf: ~' + dist + " Blöcke · Schnittwinkel " + r.angle.toFixed(1) + "° (" + quality + ")</div>" +
       '<div class="small">Über den Nether: X ' + Math.floor(x / 8) + " · Z " + Math.floor(z / 8) + " (" + Math.round(dist / 8) + " Nether-Blöcke)</div>" +
-      '<div class="small muted" style="margin-top:6px">Rechne mit ±20–50 Blöcken Abweichung. Vor Ort erneut werfen.</div>';
+      '<div class="small muted" style="margin-top:6px">Rechne mit ±20–50 Blöcken Abweichung. Vor Ort erneut werfen.</div>' +
+      '<button class="btn secondary" type="button" id="triSave" data-x="' + x + '" data-z="' + z + '" style="margin-top:10px">📍 Auf Karte speichern</button>';
     drawTri(v, r);
   }
+  $("triResult").addEventListener("click", (e) => {
+    const btn = e.target.closest("#triSave");
+    if (!btn) return;
+    addMarker({ name: "Stronghold (gepeilt)", type: "stronghold", x: Number(btn.dataset.x), z: Number(btn.dataset.z), dim: "overworld" });
+    btn.textContent = "Gespeichert ✓";
+    btn.disabled = true;
+  });
 
   $("triCalc").addEventListener("click", calcTri);
   $("triDemo").addEventListener("click", () => {
@@ -956,6 +1078,324 @@
     }
     setTimeout(() => (btn.textContent = "Ergebnis kopieren"), 1500);
   });
+
+  /* ======================================================================
+     SEED MAP (own waypoints, pan & zoom)
+     ====================================================================== */
+  const MARKER_TYPES = {
+    base:       { label: "Basis",           icon: "🏠", color: "#5fae3c", dim: "overworld" },
+    portal:     { label: "Nether-Portal",   icon: "🌀", color: "#8e44ec", dim: "overworld" },
+    village:    { label: "Dorf",            icon: "🏘️", color: "#c98f3c", dim: "overworld" },
+    stronghold: { label: "Stronghold",      icon: "👁️", color: "#b48ce8", dim: "overworld" },
+    trial:      { label: "Prüfungskammer",  icon: "⚔️", color: "#e07b4b", dim: "overworld" },
+    city:       { label: "Ancient City",    icon: "💀", color: "#1f8a96", dim: "overworld" },
+    monument:   { label: "Ozeanmonument",   icon: "🔱", color: "#2f5bd3", dim: "overworld" },
+    fortress:   { label: "Nether-Festung",  icon: "🔥", color: "#c2452f", dim: "nether" },
+    bastion:    { label: "Bastion",         icon: "🐷", color: "#6b6f78", dim: "nether" },
+    other:      { label: "Sonstiges",       icon: "📍", color: "#f2c744", dim: "overworld" }
+  };
+
+  const mapCanvas = $("mapCanvas");
+  const mctx = mapCanvas.getContext("2d");
+  const view = { dim: "overworld", cx: 0, cz: 0, scale: 0.25 }; // scale = CSS px per block
+  const SCALE_MIN = 0.01, SCALE_MAX = 8;
+  let markers = [];
+  let selectedId = null;
+  let cssW = 0, cssH = 0;
+
+  const markerKey = () => "bwh-markers-" + (currentSeed || "_ohne-seed");
+  function loadMarkers() { markers = store.get(markerKey(), []); }
+  function saveMarkers() { store.set(markerKey(), markers); }
+
+  // Marker position in the currently viewed dimension.
+  function markerPos(m) {
+    if (m.dim === view.dim) return { x: m.x, z: m.z, converted: false };
+    return view.dim === "nether"
+      ? { x: Math.floor(m.x / 8), z: Math.floor(m.z / 8), converted: true }
+      : { x: m.x * 8, z: m.z * 8, converted: true };
+  }
+
+  const toScreen = (x, z) => [cssW / 2 + (x - view.cx) * view.scale, cssH / 2 + (z - view.cz) * view.scale];
+  const toWorld = (sx, sy) => [view.cx + (sx - cssW / 2) / view.scale, view.cz + (sy - cssH / 2) / view.scale];
+
+  function niceStep(minBlocks) {
+    const steps = [16, 32, 64, 128, 256, 512, 1000, 2000, 5000, 10000, 20000, 50000, 100000];
+    return steps.find((s) => s >= minBlocks) || 100000;
+  }
+
+  function resizeMap() {
+    const dpr = window.devicePixelRatio || 1;
+    cssW = mapCanvas.clientWidth; cssH = mapCanvas.clientHeight;
+    mapCanvas.width = Math.round(cssW * dpr); mapCanvas.height = Math.round(cssH * dpr);
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawMap();
+  }
+
+  function drawMap() {
+    if (!cssW) return;
+    const nether = view.dim === "nether";
+    mctx.fillStyle = nether ? "#1a0d0b" : "#0d1210";
+    mctx.fillRect(0, 0, cssW, cssH);
+
+    const [wx0, wz0] = toWorld(0, 0), [wx1, wz1] = toWorld(cssW, cssH);
+
+    // Chunk grid
+    if ($("chunkGrid").checked && view.scale * 16 >= 5) {
+      mctx.strokeStyle = nether ? "#2a1612" : "#17201b"; mctx.lineWidth = 1;
+      mctx.beginPath();
+      for (let x = Math.floor(wx0 / 16) * 16; x <= wx1; x += 16) { const sx = Math.round(toScreen(x, 0)[0]) + .5; mctx.moveTo(sx, 0); mctx.lineTo(sx, cssH); }
+      for (let z = Math.floor(wz0 / 16) * 16; z <= wz1; z += 16) { const sy = Math.round(toScreen(0, z)[1]) + .5; mctx.moveTo(0, sy); mctx.lineTo(cssW, sy); }
+      mctx.stroke();
+    }
+
+    // Labelled coordinate grid
+    const step = niceStep(90 / view.scale);
+    mctx.strokeStyle = nether ? "#3b1f19" : "#22302a"; mctx.lineWidth = 1;
+    mctx.fillStyle = "#6d7682"; mctx.font = "11px Consolas, monospace";
+    mctx.beginPath();
+    for (let x = Math.floor(wx0 / step) * step; x <= wx1; x += step) {
+      const sx = Math.round(toScreen(x, 0)[0]) + .5; mctx.moveTo(sx, 0); mctx.lineTo(sx, cssH);
+    }
+    for (let z = Math.floor(wz0 / step) * step; z <= wz1; z += step) {
+      const sy = Math.round(toScreen(0, z)[1]) + .5; mctx.moveTo(0, sy); mctx.lineTo(cssW, sy);
+    }
+    mctx.stroke();
+    mctx.textAlign = "left";
+    for (let x = Math.floor(wx0 / step) * step; x <= wx1; x += step) mctx.fillText(String(x), toScreen(x, 0)[0] + 3, 12);
+    for (let z = Math.floor(wz0 / step) * step; z <= wz1; z += step) if (z !== Math.floor(wz0 / step) * step) mctx.fillText(String(z), 3, toScreen(0, z)[1] - 3);
+
+    // Axes through 0/0
+    const [ox, oz] = toScreen(0, 0);
+    mctx.strokeStyle = nether ? "#7a3326" : "#3f7f25"; mctx.lineWidth = 2;
+    mctx.beginPath(); mctx.moveTo(ox, 0); mctx.lineTo(ox, cssH); mctx.moveTo(0, oz); mctx.lineTo(cssW, oz); mctx.stroke();
+    mctx.fillStyle = "#e8e6e1"; mctx.font = "bold 12px system-ui";
+    mctx.fillText("0 / 0", ox + 6, oz - 6);
+
+    // Markers
+    const size = 26;
+    for (const m of markers) {
+      const p = markerPos(m), t = MARKER_TYPES[m.type] || MARKER_TYPES.other;
+      const [sx, sy] = toScreen(p.x, p.z);
+      if (sx < -40 || sy < -40 || sx > cssW + 40 || sy > cssH + 40) continue;
+      mctx.globalAlpha = p.converted ? 0.55 : 1;
+      mctx.fillStyle = "#000a"; mctx.fillRect(sx - size / 2 + 3, sy - size / 2 + 3, size, size);
+      mctx.fillStyle = t.color; mctx.fillRect(sx - size / 2, sy - size / 2, size, size);
+      mctx.fillStyle = "#0005"; mctx.fillRect(sx - size / 2, sy + size / 2 - 4, size, 4); mctx.fillRect(sx + size / 2 - 4, sy - size / 2, 4, size);
+      if (m.id === selectedId) { mctx.strokeStyle = "#fff"; mctx.lineWidth = 3; mctx.strokeRect(sx - size / 2 - 3, sy - size / 2 - 3, size + 6, size + 6); }
+      mctx.font = "15px system-ui"; mctx.textAlign = "center"; mctx.textBaseline = "middle";
+      mctx.fillText(t.icon, sx, sy + 1);
+      mctx.textBaseline = "alphabetic";
+      if (view.scale >= 0.05 || m.id === selectedId) {
+        mctx.font = "bold 12px system-ui"; mctx.fillStyle = "#e8e6e1";
+        mctx.strokeStyle = "#000"; mctx.lineWidth = 3; mctx.strokeText(m.name, sx, sy + size / 2 + 14);
+        mctx.fillText(m.name, sx, sy + size / 2 + 14);
+      }
+      mctx.globalAlpha = 1;
+    }
+    mctx.textAlign = "left";
+    $("mapScale").textContent = (nether ? "Nether" : "Oberwelt") + " · Raster " + step + " Blöcke";
+  }
+
+  function hitMarker(sx, sy) {
+    for (let i = markers.length - 1; i >= 0; i--) {
+      const p = markerPos(markers[i]);
+      const [mx, my] = toScreen(p.x, p.z);
+      if (Math.abs(sx - mx) <= 16 && Math.abs(sy - my) <= 16) return markers[i];
+    }
+    return null;
+  }
+
+  function describe(m) {
+    const t = MARKER_TYPES[m.type] || MARKER_TYPES.other;
+    const ow = m.dim === "overworld" ? [m.x, m.z] : [m.x * 8, m.z * 8];
+    const ne = m.dim === "nether" ? [m.x, m.z] : [Math.floor(m.x / 8), Math.floor(m.z / 8)];
+    return { t, ow, ne };
+  }
+
+  function zoomAt(factor, sx, sy) {
+    const [bx, bz] = toWorld(sx, sy);
+    view.scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, view.scale * factor));
+    view.cx = bx - (sx - cssW / 2) / view.scale;
+    view.cz = bz - (sy - cssH / 2) / view.scale;
+    drawMap();
+  }
+
+  function centerOn(x, z, dim) {
+    if (dim && dim !== view.dim) setDim(dim, false);
+    view.cx = x; view.cz = z;
+    if (view.scale < 0.5) view.scale = 0.5;
+    drawMap();
+  }
+
+  function setDim(dim, keepPlace = true) {
+    if (dim === view.dim) return;
+    if (keepPlace) {
+      const f = dim === "nether" ? 1 / 8 : 8;
+      view.cx *= f; view.cz *= f;
+    }
+    view.dim = dim;
+    $("dimOw").setAttribute("aria-pressed", dim === "overworld");
+    $("dimNether").setAttribute("aria-pressed", dim === "nether");
+    $("mkDim").value = dim;
+    drawMap();
+  }
+
+  // Pointer handling: drag to pan, pinch to zoom, tap to pick.
+  const pointers = new Map();
+  let dragMoved = 0, pinchDist = 0;
+  const localPos = (e) => { const r = mapCanvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+  mapCanvas.addEventListener("pointerdown", (e) => {
+    mapCanvas.setPointerCapture(e.pointerId);
+    pointers.set(e.pointerId, localPos(e));
+    dragMoved = 0;
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    }
+    mapCanvas.classList.add("dragging");
+  });
+  mapCanvas.addEventListener("pointermove", (e) => {
+    const p = localPos(e);
+    const [bx, bz] = toWorld(p[0], p[1]);
+    const ix = Math.floor(bx), iz = Math.floor(bz);
+    $("mapCursor").textContent = "X: " + ix + "  Z: " + iz + "  · Chunk " + Math.floor(ix / 16) + ", " + Math.floor(iz / 16);
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 1) {
+      const dx = p[0] - prev[0], dy = p[1] - prev[1];
+      dragMoved += Math.abs(dx) + Math.abs(dy);
+      view.cx -= dx / view.scale; view.cz -= dy / view.scale;
+      drawMap();
+    } else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinchDist > 0) zoomAt(d / pinchDist, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+      pinchDist = d; dragMoved += 10;
+    }
+  });
+  const endPointer = (e) => {
+    if (!pointers.has(e.pointerId)) return;
+    const p = pointers.get(e.pointerId);
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinchDist = 0;
+    if (pointers.size === 0) mapCanvas.classList.remove("dragging");
+    if (e.type === "pointerup" && pointers.size === 0 && dragMoved < 6) onMapTap(p[0], p[1]);
+  };
+  mapCanvas.addEventListener("pointerup", endPointer);
+  mapCanvas.addEventListener("pointercancel", endPointer);
+  mapCanvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const p = localPos(e);
+    zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, p[0], p[1]);
+  }, { passive: false });
+
+  function onMapTap(sx, sy) {
+    const m = hitMarker(sx, sy);
+    const info = $("mapInfo");
+    if (m) {
+      selectedId = m.id;
+      const d = describe(m);
+      info.className = "map-info";
+      info.innerHTML = d.t.icon + " <b>" + esc(m.name) + "</b> (" + esc(d.t.label) + ") · Oberwelt <span class='mono'>X " + d.ow[0] + " Z " + d.ow[1] +
+        "</span> · Nether <span class='mono'>X " + d.ne[0] + " Z " + d.ne[1] + "</span>";
+    } else {
+      selectedId = null;
+      const [bx, bz] = toWorld(sx, sy);
+      const x = Math.floor(bx), z = Math.floor(bz);
+      $("mkX").value = x; $("mkZ").value = z; $("mkDim").value = view.dim;
+      info.className = "map-info muted";
+      info.innerHTML = "Koordinaten <span class='mono'>X " + x + " Z " + z + "</span> (" + (view.dim === "nether" ? "Nether" : "Oberwelt") + ") ins Marker-Formular übernommen.";
+    }
+    drawMap();
+    renderMarkerList();
+  }
+
+  function renderMarkerList() {
+    $("mkSeedLabel").textContent = currentSeed ? "· Seed " + currentSeed : "· ohne Seed";
+    if (!markers.length) {
+      $("markerList").innerHTML = '<p class="muted small">Noch keine Marker. Tippe auf die Karte oder trage Koordinaten ein, zum Beispiel deine Basis, Portale oder gefundene Bauwerke.</p>';
+      return;
+    }
+    $("markerList").innerHTML = markers.map((m) => {
+      const d = describe(m);
+      return '<div class="marker-item"' + (m.id === selectedId ? ' style="border-color:#fff"' : "") + '>' +
+        '<span class="mi-icon" style="background:' + d.t.color + '">' + d.t.icon + "</span>" +
+        '<div class="mi-text"><b>' + esc(m.name) + "</b><span>OW " + d.ow[0] + " / " + d.ow[1] + " · N " + d.ne[0] + " / " + d.ne[1] + "</span></div>" +
+        '<button class="icon-btn" type="button" data-act="go" data-id="' + m.id + '" aria-label="Auf Karte zeigen">🎯</button>' +
+        '<button class="icon-btn danger" type="button" data-act="del" data-id="' + m.id + '" aria-label="Löschen">✕</button></div>';
+    }).join("");
+  }
+
+  function addMarker(m) {
+    markers.push(Object.assign({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }, m));
+    saveMarkers();
+    selectedId = markers[markers.length - 1].id;
+    renderMarkerList();
+    drawMap();
+  }
+
+  $("markerList").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const m = markers.find((x) => x.id === btn.dataset.id);
+    if (!m) return;
+    if (btn.dataset.act === "del") {
+      markers = markers.filter((x) => x !== m);
+      if (selectedId === m.id) selectedId = null;
+      saveMarkers();
+    } else {
+      selectedId = m.id;
+      centerOn(m.x, m.z, m.dim);
+      $("map").scrollIntoView({ behavior: "smooth" });
+    }
+    renderMarkerList();
+    drawMap();
+  });
+
+  $("mkType").innerHTML = Object.entries(MARKER_TYPES).map(([k, t]) => '<option value="' + k + '">' + t.icon + " " + esc(t.label) + "</option>").join("");
+  $("mkType").addEventListener("change", () => { $("mkDim").value = MARKER_TYPES[$("mkType").value].dim; });
+  $("mkAdd").addEventListener("click", () => {
+    const x = num($("mkX")), z = num($("mkZ"));
+    const msg = $("mkMsg");
+    if (x === null || z === null) { msg.textContent = "Bitte X und Z eingeben."; msg.style.color = "var(--redstone)"; return; }
+    const type = $("mkType").value;
+    const name = $("mkName").value.trim() || MARKER_TYPES[type].label;
+    addMarker({ name, type, x: Math.round(x), z: Math.round(z), dim: $("mkDim").value });
+    msg.style.color = ""; msg.textContent = "„" + name + "“ gespeichert.";
+    $("mkName").value = "";
+    centerOn(Math.round(x), Math.round(z), $("mkDim").value);
+  });
+
+  $("dimOw").addEventListener("click", () => setDim("overworld"));
+  $("dimNether").addEventListener("click", () => setDim("nether"));
+  $("chunkGrid").addEventListener("change", drawMap);
+  $("zoomIn").addEventListener("click", () => zoomAt(1.5, cssW / 2, cssH / 2));
+  $("zoomOut").addEventListener("click", () => zoomAt(1 / 1.5, cssW / 2, cssH / 2));
+  $("zoomHome").addEventListener("click", () => { view.cx = 0; view.cz = 0; view.scale = view.dim === "nether" ? 1 : 0.25; drawMap(); });
+  $("gotoBtn").addEventListener("click", () => {
+    const x = num($("gotoX")), z = num($("gotoZ"));
+    if (x !== null && z !== null) centerOn(x, z);
+  });
+
+  $("openChunkbase").addEventListener("click", () => {
+    if (!currentSeed) {
+      $("mapInfo").className = "map-info";
+      $("mapInfo").innerHTML = "Lade zuerst oben einen Seed, dann öffnet sich Chunkbase direkt mit deiner Welt.";
+      $("seedInput").focus();
+      return;
+    }
+    const url = "https://www.chunkbase.com/apps/seed-map#seed=" + encodeURIComponent(currentSeed) +
+      "&dimension=" + view.dim + "&x=" + Math.round(view.cx) + "&z=" + Math.round(view.cz);
+    window.open(url, "_blank", "noopener");
+  });
+
+  seedListeners.push(() => { selectedId = null; loadMarkers(); renderMarkerList(); drawMap(); });
+  loadMarkers();
+  renderMarkerList();
+  window.addEventListener("resize", resizeMap);
+  resizeMap();
 })();
 </script>
 </body>
