@@ -282,7 +282,8 @@
   .icon-btn.danger:hover { border-color: var(--redstone); color: var(--redstone); }
 
   /* World survey */
-  .survey { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .survey { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+  .survey > div { min-width: 0; }
   .survey h4 { margin: 0 0 10px; font-size: .8rem; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
   .survey-head { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
   .stat { background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; min-width: 0; }
@@ -294,10 +295,10 @@
   .mix-bar > div { height: 100%; }
   .mix-row .pct { font-family: var(--mono); font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
   .sw { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; display: inline-block; }
-  .near-list { display: grid; gap: 8px; }
+  .near-list { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
   .near { display: flex; gap: 10px; align-items: center; background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
   .near .sw { width: 14px; height: 30px; }
-  .near .txt { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
+  .near .txt { flex: 1 1 auto; min-width: 0; font-size: .88rem; overflow-wrap: anywhere; }
   .near .txt b { display: block; }
   .near .txt span { color: var(--muted); font-size: .8rem; }
   .near .dist { font-family: var(--mono); font-size: .8rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -382,11 +383,11 @@
           <button type="button" id="dimNether" class="nether" aria-pressed="false">🔥 Nether</button>
         </div>
         <label class="check"><input type="checkbox" id="biomeLayer" checked>Biome</label>
+        <label class="check"><input type="checkbox" id="structLayer" checked>Bauwerke</label>
         <label class="check"><input type="checkbox" id="slimeLayer">Schleim-Chunks</label>
         <label class="check"><input type="checkbox" id="chunkGrid">Chunk-Raster</label>
-        <span class="spacer"></span>
-        <a class="btn" id="openChunkbase" href="https://www.chunkbase.com/apps/seed-map" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">🏰 Bauwerke in Chunkbase</a>
       </div>
+      <div class="map-toolbar" id="structToggles" aria-label="Bauwerke anzeigen"></div>
       <div class="map-toolbar">
         <div style="flex:1 1 220px;min-width:0"><select id="biomeHighlight" aria-label="Biom hervorheben"><option value="-1">Biom hervorheben …</option></select></div>
         <button class="btn secondary" type="button" id="biomeFind">🔎 Nächstes finden</button>
@@ -409,7 +410,7 @@
       <div class="map-info muted" id="mapInfo">Ziehen zum Verschieben, Mausrad oder zwei Finger zum Zoomen. Tippe auf die Karte, um die Koordinaten ins Marker-Formular zu übernehmen.</div>
       <div class="callout info">
         <b>Biome</b> berechnet die App direkt aus deinem Seed, mit der Weltgenerierung von Minecraft 1.21.4+ (cubiomes). Seit 1.18 erzeugen Bedrock und Java mit demselben Seed die gleichen Oberwelt-Biome. Der Nether ist experimentell und kann in Bedrock abweichen. Wenn ein späteres Update die Generierung ändert, kann es kleine Unterschiede geben.
-        <b>Bauwerke</b> werden in Bedrock nach eigenen Regeln verteilt, die nicht öffentlich sind. Deshalb zeigt diese Karte sie nicht an. Nutze dafür den Chunkbase-Button (dort Version auf <b>Bedrock</b> stellen) und trag deine Funde als Marker ein. Sie werden pro Seed gespeichert und zwischen Oberwelt und Nether umgerechnet.
+        <b>Bauwerke</b> (Dörfer, Tempel, Hexenhütten, Iglus, Prüfungskammern, Portalruinen) berechnet die App mit den Bedrock-Platzierungsregeln, die die Community entschlüsselt hat. Abgeglichen mit Chunkbase-Daten für Bedrock 26.0: Dörfer und Tempel liegen auf dem gleichen Block, Prüfungskammern sind auf etwa ±16 Blöcke genau. Portalruinen sind noch nicht abgeglichen, ein Abgleich direkt im Spiel steht noch aus. Strongholds, Nether-Festungen, Bastionen und Ozeanmonumente fehlen noch. Für Strongholds nutze den Enderaugen-Rechner. Deine eigenen Funde kannst du als Marker speichern, sie werden zwischen Oberwelt und Nether umgerechnet.
       </div>
     </div>
 
@@ -15661,6 +15662,89 @@ return asmFunc({ "env": env });
   }
   function surfaceY(scale, dim) { return dim === 0 ? Math.max(1, 256 / scale | 0) : 0; }
 
+  /* Bedrock structure placement.
+   * Region-based structures seed MT19937 with the low 32 bits of
+   * regX*341873128712 + regZ*132897987541 + worldSeed + salt and pick the chunk inside the
+   * region with one (uniform) or two averaged (triangular) draws per axis. Trial Chambers use
+   * Java's placement. Constants as documented by the community Bedrock finders (SeedFinder,
+   * MCBE-seedcracker); the structure's own chunk-centre biome at the top of the world decides
+   * whether (and which) structure generates. */
+  var MTS = new Uint32Array(624);
+  function mtOutputs(seed, n) {
+    MTS[0] = seed >>> 0;
+    for (var i = 1; i < n + 397; i++) { var p = MTS[i - 1] ^ (MTS[i - 1] >>> 30); MTS[i] = (Math.imul(1812433253, p) + i) >>> 0; }
+    var out = [];
+    for (var j = 0; j < n; j++) {
+      var y = (MTS[j] & 0x80000000) | (MTS[j + 1] & 0x7fffffff);
+      var v = MTS[j + 397] ^ (y >>> 1) ^ ((y & 1) ? 0x9908b0df : 0);
+      v ^= v >>> 11; v ^= (v << 7) & 0x9d2c5680; v ^= (v << 15) & 0xefc60000; v ^= v >>> 18;
+      out.push(v >>> 0);
+    }
+    return out;
+  }
+  var GROUPS = {
+    village: { salt: 10387312, spacing: 34, range: 26, tri: true },
+    temple:  { salt: 14357617, spacing: 32, range: 24, tri: false },
+    portal:  { salt: 40552231, spacing: 40, range: 25, tri: false },
+    trial:   { salt: 94251327, spacing: 34, range: 22, java: true }
+  };
+  var VILLAGE_BIOMES = { 1: 1, 2: 1, 5: 1, 12: 1, 30: 1, 35: 1, 129: 1, 177: 1 };
+  function bedrockPos(lo, c, rx, rz) {
+    var s = (Math.imul(rx, 2570712328 | 0) + Math.imul(rz, 4048968661 | 0) + lo + c.salt) >>> 0;
+    var r = mtOutputs(s, c.tri ? 4 : 2), R = c.range;
+    var ox = c.tri ? ((r[0] % R) + (r[1] % R)) >> 1 : r[0] % R;
+    var oz = c.tri ? ((r[2] % R) + (r[3] % R)) >> 1 : r[1] % R;
+    return { x: (rx * c.spacing + ox) * 16 + 8, z: (rz * c.spacing + oz) * 16 + 8 };
+  }
+  var M48 = (BigInt(1) << BigInt(48)) - BigInt(1), JMUL = BigInt("25214903917"), JADD = BigInt(11);
+  function javaPos(seedBig, c, rx, rz) {
+    var s = BigInt.asUintN(64, BigInt(rx) * BigInt("341873128712") + BigInt(rz) * BigInt("132897987541") + seedBig + BigInt(c.salt));
+    var st = (s ^ JMUL) & M48;
+    function next31() { st = (st * JMUL + JADD) & M48; return Number(st >> BigInt(17)); }
+    function nextInt(n) {
+      if ((n & -n) === n) return Number((BigInt(n) * BigInt(next31())) >> BigInt(31));
+      var bits, val;
+      do { bits = next31(); val = bits % n; } while (bits - val + (n - 1) > 0x7fffffff);
+      return val;
+    }
+    var ox = nextInt(c.range), oz = nextInt(c.range);
+    return { x: (rx * c.spacing + ox) * 16, z: (rz * c.spacing + oz) * 16 };
+  }
+  function cellBiome(x, z) {
+    var p = E.gen(4, (x >> 4) * 4 + 2, (z >> 4) * 4 + 2, 1, 1, 79);
+    return new Int32Array(E.memory.buffer, p, 1)[0];
+  }
+  function structureType(g, biome) {
+    if (g === "village") return VILLAGE_BIOMES[biome] ? "village" : null;
+    if (g === "temple") {
+      if (biome === 2) return "desert";
+      if (biome === 21 || biome === 168) return "jungle";
+      if (biome === 6) return "swamp";
+      if (biome === 12 || biome === 30 || biome === 179) return "igloo";
+      return null;
+    }
+    return g;
+  }
+  function structureAt(seedBig, lo, g, rx, rz) {
+    var c = GROUPS[g];
+    var p = c.java ? javaPos(seedBig, c, rx, rz) : bedrockPos(lo, c, rx, rz);
+    var b = cellBiome(p.x, p.z);
+    return { g: g, rx: rx, rz: rz, x: p.x, z: p.z, biome: b, type: structureType(g, b) };
+  }
+  function nearestStructures(seedBig, lo, radius) {
+    var best = {};
+    for (var g in GROUPS) {
+      var span = GROUPS[g].spacing * 16, n = Math.ceil(radius / span) + 1;
+      for (var rz = -n; rz < n; rz++) for (var rx = -n; rx < n; rx++) {
+        var s = structureAt(seedBig, lo, g, rx, rz);
+        if (!s.type) continue;
+        s.d = Math.hypot(s.x, s.z);
+        if (s.d <= radius && (!best[s.type] || s.d < best[s.type].d)) best[s.type] = s;
+      }
+    }
+    return best;
+  }
+
   function handle(m, reply) {
     if (m.type === "tile") {
       ensure(m.lo, m.hi, m.dim);
@@ -15682,7 +15766,14 @@ return asmFunc({ "env": env });
         }
       }
       var oids = tile(4, -32, -32, surfaceY(4, 0));
-      reply({ type: "survey", key: m.key, counts: counts, total: total, nearest: nearest, origin: oids[32 * 64 + 32] });
+      var origin = oids[32 * 64 + 32];
+      var structs = nearestStructures(BigInt(m.key), m.lo, 3000);
+      reply({ type: "survey", key: m.key, counts: counts, total: total, nearest: nearest, origin: origin, structs: structs });
+    } else if (m.type === "structs") {
+      ensure(m.lo, m.hi, 0);
+      var seedBig = BigInt(m.key), res = [];
+      for (var q = 0; q < m.list.length; q++) res.push(structureAt(seedBig, m.lo, m.list[q].g, m.list[q].rx, m.list[q].rz));
+      reply({ type: "structs", key: m.key, results: res });
     } else if (m.type === "find") {
       ensure(m.lo, m.hi, m.dim);
       var S = 64, T = 64 * S, R = 6;
@@ -16310,6 +16401,8 @@ return asmFunc({ "env": env });
     mctx.fillStyle = "#e8e6e1"; mctx.font = "bold 12px system-ui";
     mctx.fillText("0 / 0", ox + 6, oz - 6);
 
+    if (view.dim === "overworld" && $("structLayer").checked) drawStructures(wx0, wz0, wx1, wz1);
+
     // Markers
     const size = 26;
     for (const m of markers) {
@@ -16397,7 +16490,7 @@ return asmFunc({ "env": env });
     return BigInt.asUintN(64, BigInt(h));
   }
   function setSeedParts(seed) {
-    tiles.clear(); engine.queue = []; engine.pending.clear();
+    tiles.clear(); structCache.clear(); engine.queue = []; engine.pending.clear();
     if (!seed) { seedParts = null; return; }
     const v = seedTo64(seed);
     seedParts = { lo: Number(v & BigInt(0xffffffff)) | 0, hi: Number(v >> BigInt(32)) | 0, key: v.toString() };
@@ -16415,6 +16508,8 @@ return asmFunc({ "env": env });
       if (engine.ready) return;
       engine.ready = true; engine.kind = m.kind; clearTimeout(engine.timer);
       updateEngineChip(); requestSurvey(); pump(); scheduleDraw();
+    } else if (m.type === "structs") {
+      onStructResults(m);
     } else if (m.type === "survey") {
       if (seedParts && m.key === seedParts.key) renderSurvey(m);
     } else if (m.type === "tile") {
@@ -16463,6 +16558,7 @@ return asmFunc({ "env": env });
     clearTimeout(engine.timer);
     engine.pending.clear(); engine.inflight = 0;
     surveyKey = null;
+    structPendingBatch = false;
     let chain = CubEngine.boot()
       .then((k) => onEngineMsg({ type: "ready", kind: (k === "wasm" ? "WebAssembly" : "JavaScript") + ", ohne Worker" }))
       .catch(() => { engine.failed = true; updateEngineChip(); renderSurveyStatus(); scheduleDraw(); });
@@ -16592,6 +16688,98 @@ return asmFunc({ "env": env });
     }
   }
 
+  /* ---------- Structures (Bedrock placement, computed by the engine) ---------- */
+  const STRUCT_TYPES = {
+    village: { label: "Dorf",           icon: "🏘️", color: "#c98f3c", group: "village", marker: "village" },
+    trial:   { label: "Prüfungskammer", icon: "⚔️", color: "#e07b4b", group: "trial",   marker: "trial" },
+    desert:  { label: "Wüstentempel",   icon: "🏜️", color: "#e6b85c", group: "temple",  marker: "other" },
+    jungle:  { label: "Dschungeltempel", icon: "🗿", color: "#6b9a1e", group: "temple", marker: "other" },
+    swamp:   { label: "Hexenhütte",     icon: "🧙", color: "#3f8f5f", group: "temple",  marker: "other" },
+    igloo:   { label: "Iglu",           icon: "🧊", color: "#a8dcf0", group: "temple",  marker: "other" },
+    portal:  { label: "Portalruine",    icon: "🌀", color: "#8e44ec", group: "portal",  marker: "portal" }
+  };
+  const STRUCT_GROUPS = { village: 34, temple: 32, trial: 34, portal: 40 }; // region size in chunks
+  const structCache = new Map();
+  let structShown = store.get("bwh-structs", Object.keys(STRUCT_TYPES).filter((k) => k !== "portal"));
+  let structPendingBatch = false;
+
+  function renderStructToggles() {
+    $("structToggles").innerHTML = Object.entries(STRUCT_TYPES).map(([k, t]) =>
+      '<label class="check" style="font-weight:500"><input type="checkbox" data-struct="' + k + '"' + (structShown.includes(k) ? " checked" : "") + ">" +
+      t.icon + " " + esc(t.label) + "</label>").join("");
+  }
+  $("structToggles").addEventListener("change", (e) => {
+    const k = e.target.dataset.struct;
+    if (!k) return;
+    structShown = structShown.filter((x) => x !== k);
+    if (e.target.checked) structShown.push(k);
+    store.set("bwh-structs", structShown);
+    drawMap();
+  });
+
+  function visibleStructures(wx0, wz0, wx1, wz1) {
+    const out = [], missing = [];
+    if (!seedParts || view.scale < 0.02) return { out, missing };
+    const groups = new Set(structShown.map((k) => STRUCT_TYPES[k].group));
+    for (const g of groups) {
+      const span = STRUCT_GROUPS[g] * 16;
+      for (let rz = Math.floor(wz0 / span) - 1; rz <= Math.floor(wz1 / span); rz++) {
+        for (let rx = Math.floor(wx0 / span) - 1; rx <= Math.floor(wx1 / span); rx++) {
+          const key = seedParts.key + "|" + g + "|" + rx + "|" + rz;
+          const r = structCache.get(key);
+          if (r === undefined) missing.push({ key, g, rx, rz });
+          else if (r && r.type && structShown.includes(r.type)) out.push(r);
+        }
+      }
+    }
+    return { out, missing };
+  }
+
+  function drawStructures(wx0, wz0, wx1, wz1) {
+    const { out, missing } = visibleStructures(wx0, wz0, wx1, wz1);
+    if (missing.length && engine.ready && !structPendingBatch) {
+      structPendingBatch = true;
+      engine.post({ type: "structs", key: seedParts.key, lo: seedParts.lo, hi: seedParts.hi,
+        list: missing.slice(0, 2000).map((m) => ({ g: m.g, rx: m.rx, rz: m.rz })) });
+    }
+    const big = view.scale >= 0.12, r = big ? 13 : 9;
+    for (const s of out) {
+      const t = STRUCT_TYPES[s.type];
+      const [sx, sy] = toScreen(s.x, s.z);
+      if (sx < -20 || sy < -20 || sx > cssW + 20 || sy > cssH + 20) continue;
+      mctx.beginPath(); mctx.arc(sx, sy, r, 0, Math.PI * 2);
+      mctx.fillStyle = "#14161aee"; mctx.fill();
+      mctx.lineWidth = 2.5; mctx.strokeStyle = t.color; mctx.stroke();
+      mctx.font = (big ? 14 : 10) + "px system-ui"; mctx.textAlign = "center"; mctx.textBaseline = "middle";
+      mctx.fillStyle = "#fff"; mctx.fillText(t.icon, sx, sy + 1);
+      mctx.textBaseline = "alphabetic";
+      if (view.scale >= 0.6) {
+        mctx.font = "600 11px system-ui"; mctx.lineWidth = 3; mctx.strokeStyle = "#000";
+        mctx.strokeText(t.label, sx, sy + r + 12); mctx.fillStyle = "#f0f0f0"; mctx.fillText(t.label, sx, sy + r + 12);
+      }
+    }
+    mctx.textAlign = "left";
+  }
+
+  function onStructResults(m) {
+    structPendingBatch = false;
+    if (!seedParts || m.key !== seedParts.key) return;
+    for (const r of m.results) structCache.set(seedParts.key + "|" + r.g + "|" + r.rx + "|" + r.rz, r);
+    if (structCache.size > 60000) structCache.clear();
+    scheduleDraw();
+  }
+
+  function hitStructure(sx, sy) {
+    const [wx0, wz0] = toWorld(0, 0), [wx1, wz1] = toWorld(cssW, cssH);
+    if (view.dim !== "overworld" || !$("structLayer").checked) return null;
+    let best = null, bd = 16;
+    for (const s of visibleStructures(wx0, wz0, wx1, wz1).out) {
+      const [px, py] = toScreen(s.x, s.z), d = Math.hypot(px - sx, py - sy);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
   /* ---------- World survey for the dashboard ---------- */
   const OCEAN_IDS = new Set([0, 10, 24, 44, 45, 46, 48, 49, 50]);
   const WATER_IDS = new Set([...OCEAN_IDS, 7, 11]);
@@ -16670,8 +16858,22 @@ return asmFunc({ "env": env });
     });
     html += '<h4 style="margin-top:16px">Tipps für genau diese Welt</h4><ul>' + surveyTips(r, origin, waterPct, goals).map((t) => "<li>" + t + "</li>").join("") + "</ul></div>";
 
-    // Nearest goals
-    html += '<div><h4>Wichtige Biome in der Nähe (bis 4096 Blöcke)</h4><div class="near-list">';
+    // Nearest structures, then nearest goal biomes
+    html += '<div><h4>Nächste Bauwerke (bis 3000 Blöcke)</h4><div class="near-list" style="margin-bottom:18px">';
+    Object.entries(STRUCT_TYPES).map(([k, t]) => ({ k, t, n: (r.structs || {})[k] }))
+      .sort((a, b) => (a.n ? a.n.d : 1e9) - (b.n ? b.n.d : 1e9)).forEach(({ k, t, n }) => {
+        if (n) {
+          const b = BIOMES[n.biome];
+          html += '<div class="near"><span class="mi-icon" style="width:30px;height:30px;display:grid;place-items:center;border-radius:50%;border:2px solid ' + t.color + '">' + t.icon + "</span>" +
+            '<div class="txt"><b>' + esc(t.label) + "</b><span>" + esc(b ? b.de : "") + "</span></div>" +
+            '<div class="dist">' + fmtNum(n.d) + " Bl. " + dirName(n.x, n.z) + "<br>X " + n.x + " Z " + n.z + "</div>" +
+            '<button class="icon-btn" type="button" data-struct-go="' + k + '" data-x="' + n.x + '" data-z="' + n.z + '" aria-label="' + esc(t.label) + ' auf der Karte zeigen">🗺️</button></div>';
+        } else {
+          html += '<div class="near missing"><span style="width:30px;text-align:center">' + t.icon + '</span><div class="txt"><b>' + esc(t.label) + "</b><span>Nicht im Umkreis von 3000 Blöcken.</span></div></div>";
+        }
+      });
+    html += "</div>";
+    html += '<h4>Wichtige Biome in der Nähe (bis 4096 Blöcke)</h4><div class="near-list">';
     goals.slice().sort((a, b) => (a.n ? a.n.d : 1e9) - (b.n ? b.n.d : 1e9)).forEach(({ g, n }) => {
       const b = n ? BIOMES[n.id] : BIOMES[g.ids[0]];
       if (n) {
@@ -16692,10 +16894,10 @@ return asmFunc({ "env": env });
     const by = (label) => goals.find((x) => x.g.label === label).n;
     const at = (n) => fmtNum(n.d) + " Blöcke Richtung " + dirName(n.x, n.z) + " (X " + n.x + " / Z " + n.z + ")";
     if (origin && OCEAN_IDS.has(r.origin)) tips.push("Der Ursprung liegt im <b>Meer</b>. Bau dir früh ein Boot und fahr die Küste ab. So findest du schnell Schiffswracks und Dörfer am Ufer.");
-    const vil = by("Dorf-Biom");
-    if (vil && vil.d < 300) tips.push("Dorf-Biome liegen <b>direkt am Spawn</b>. Erkunde zuerst die nähere Umgebung, die Chance auf ein Dorf ist hoch.");
-    else if (vil) tips.push("Die nächsten Dorf-Biome liegen <b>" + at(vil) + "</b>. Dort lohnt sich die Dorfsuche zuerst.");
-    else tips.push("Rund um den Spawn gibt es kaum Dorf-Biome. Schlag dein erstes Lager selbst auf und erkunde später weiter.");
+    const S = r.structs || {};
+    if (S.village) tips.push("Das nächste <b>Dorf</b> liegt " + at(S.village) + ". Dort bekommst du Bett, Essen und später Handel.");
+    else tips.push("Im Umkreis von 3000 Blöcken gibt es kein Dorf. Schlag dein erstes Lager selbst auf.");
+    if (S.trial) tips.push("Die nächste <b>Prüfungskammer</b> liegt unterirdisch " + at(S.trial) + ", meist zwischen Y −40 und −20.");
     if (waterPct >= 55) tips.push("Sehr viel Wasser (" + waterPct + " %): Ozeanruinen, Wracks und Vergrabene Schätze sind hier dein Startvorteil.");
     else if (waterPct <= 15) tips.push("Fast nur Land (" + (100 - waterPct) + " %): ideal für schnelle Reisen zu Fuß oder mit Pferd.");
     const mtn = by("Gebirge");
@@ -16712,6 +16914,20 @@ return asmFunc({ "env": env });
   }
 
   $("worldSurvey").addEventListener("click", (e) => {
+    const sbtn = e.target.closest("button[data-struct-go]");
+    if (sbtn) {
+      const k = sbtn.dataset.structGo;
+      $("structLayer").checked = true;
+      if (!structShown.includes(k)) { structShown.push(k); renderStructToggles(); }
+      highlight = -1; fillHighlightOptions(); tiles.forEach((t) => (t.canvas = null));
+      centerOn(Number(sbtn.dataset.x), Number(sbtn.dataset.z), "overworld");
+      view.scale = Math.max(view.scale, 0.5);
+      drawMap();
+      $("mkX").value = sbtn.dataset.x; $("mkZ").value = sbtn.dataset.z; $("mkDim").value = "overworld";
+      $("mkType").value = STRUCT_TYPES[k].marker; $("mkName").value = STRUCT_TYPES[k].label;
+      $("map").scrollIntoView({ behavior: "smooth" });
+      return;
+    }
     const btn = e.target.closest("button[data-survey-go]");
     if (!btn) return;
     highlight = Number(btn.dataset.surveyGo);
@@ -16845,6 +17061,14 @@ return asmFunc({ "env": env });
       info.className = "map-info";
       info.innerHTML = d.t.icon + " <b>" + esc(m.name) + "</b> (" + esc(d.t.label) + ") · Oberwelt <span class='mono'>X " + d.ow[0] + " Z " + d.ow[1] +
         "</span> · Nether <span class='mono'>X " + d.ne[0] + " Z " + d.ne[1] + "</span>";
+    } else if (hitStructure(sx, sy)) {
+      const st = hitStructure(sx, sy), t = STRUCT_TYPES[st.type], b = BIOMES[st.biome];
+      selectedId = null;
+      $("mkX").value = st.x; $("mkZ").value = st.z; $("mkDim").value = "overworld";
+      $("mkType").value = t.marker; $("mkName").value = t.label;
+      info.className = "map-info";
+      info.innerHTML = t.icon + " <b>" + esc(t.label) + "</b>" + (b ? " (" + esc(b.de) + ")" : "") + " bei <span class='mono'>X " + st.x + " Z " + st.z +
+        "</span> · Nether <span class='mono'>X " + Math.floor(st.x / 8) + " Z " + Math.floor(st.z / 8) + "</span>. Ins Marker-Formular übernommen, tippe „Marker hinzufügen“, wenn du es gefunden hast.";
     } else {
       selectedId = null;
       const [bx, bz] = toWorld(sx, sy);
@@ -16927,22 +17151,6 @@ return asmFunc({ "env": env });
     if (x !== null && z !== null) centerOn(x, z);
   });
 
-  const chunkbaseUrl = () => "https://www.chunkbase.com/apps/seed-map#seed=" + encodeURIComponent(currentSeed || "") +
-    "&dimension=" + view.dim + "&x=" + Math.round(view.cx) + "&z=" + Math.round(view.cz);
-  $("openChunkbase").addEventListener("click", (e) => {
-    $("openChunkbase").href = chunkbaseUrl();
-    if (currentSeed) {
-      $("mapInfo").className = "map-info";
-      $("mapInfo").innerHTML = "Falls sich kein neuer Tab öffnet, kopiere diesen Link in deinen Browser:<br><span class='mono small' style='word-break:break-all'>" + esc(chunkbaseUrl()) + "</span>";
-    }
-    if (!currentSeed) {
-      e.preventDefault();
-      $("mapInfo").className = "map-info";
-      $("mapInfo").innerHTML = "Lade zuerst oben einen Seed, dann öffnet sich Chunkbase direkt mit deiner Welt.";
-      $("seedInput").focus();
-    }
-  });
-
   $("biomeLayer").addEventListener("change", drawMap);
   $("slimeLayer").addEventListener("change", drawMap);
   $("biomeHighlight").addEventListener("change", () => {
@@ -16965,6 +17173,8 @@ return asmFunc({ "env": env });
 
   seedListeners.push((seed) => { selectedId = null; setSeedParts(seed); requestSurvey(); loadMarkers(); renderMarkerList(); drawMap(); });
   setSeedParts(currentSeed);
+  renderStructToggles();
+  $("structLayer").addEventListener("change", drawMap);
   requestSurvey();
   fillHighlightOptions();
   updateEngineChip();
