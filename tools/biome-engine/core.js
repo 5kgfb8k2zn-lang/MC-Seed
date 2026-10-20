@@ -32,6 +32,23 @@
       ensure(m.lo, m.hi, m.dim);
       var ids = tile(m.scale, m.tx * 64, m.tz * 64, surfaceY(m.scale, m.dim));
       reply({ type: "tile", key: m.key, ids: ids }, [ids.buffer]);
+    } else if (m.type === "survey") {
+      // Overworld overview around the origin at 1:16: biome mix within 2000 blocks,
+      // nearest cell of every biome within 4096 blocks.
+      ensure(m.lo, m.hi, 0);
+      var S2 = 16, R2 = 4, counts = {}, total = 0, nearest = {};
+      for (var sz = -R2; sz < R2; sz++) for (var sx = -R2; sx < R2; sx++) {
+        var sids = tile(S2, sx * 64, sz * 64, surfaceY(S2, 0));
+        for (var k = 0; k < 4096; k++) {
+          var id = sids[k];
+          var cx = (sx * 64 + (k & 63)) * S2 + S2 / 2, cz = (sz * 64 + (k >> 6)) * S2 + S2 / 2;
+          var dd = Math.hypot(cx, cz);
+          if (dd <= 2000) { counts[id] = (counts[id] || 0) + 1; total++; }
+          if (dd <= 4096 && (!nearest[id] || dd < nearest[id].d)) nearest[id] = { x: cx, z: cz, d: dd };
+        }
+      }
+      var oids = tile(4, -32, -32, surfaceY(4, 0));
+      reply({ type: "survey", key: m.key, counts: counts, total: total, nearest: nearest, origin: oids[32 * 64 + 32] });
     } else if (m.type === "find") {
       ensure(m.lo, m.hi, m.dim);
       var S = 64, T = 64 * S, R = 6;

@@ -280,6 +280,28 @@
   .icon-btn { cursor: pointer; background: #0d0f12; color: var(--text); border: 1px solid var(--line); border-radius: 3px; padding: 6px 9px; font: inherit; font-size: .85rem; }
   .icon-btn:hover { border-color: var(--grass); }
   .icon-btn.danger:hover { border-color: var(--redstone); color: var(--redstone); }
+
+  /* World survey */
+  .survey { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .survey h4 { margin: 0 0 10px; font-size: .8rem; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .survey-head { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .stat { background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 12px; min-width: 0; }
+  .stat b { display: block; font-size: 1.05rem; }
+  .stat span { font-size: .78rem; color: var(--muted); }
+  .mix-row { display: grid; grid-template-columns: minmax(0, 150px) 1fr 44px; gap: 8px; align-items: center; font-size: .88rem; margin-bottom: 6px; }
+  .mix-row .nm { display: flex; align-items: center; gap: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .mix-bar { height: 12px; background: #0d0f12; border: 1px solid var(--line); border-radius: 2px; overflow: hidden; }
+  .mix-bar > div { height: 100%; }
+  .mix-row .pct { font-family: var(--mono); font-size: .8rem; text-align: right; font-variant-numeric: tabular-nums; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; flex: 0 0 auto; display: inline-block; }
+  .near-list { display: grid; gap: 8px; }
+  .near { display: flex; gap: 10px; align-items: center; background: var(--card-2); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; }
+  .near .sw { width: 14px; height: 30px; }
+  .near .txt { flex: 1 1 auto; min-width: 0; font-size: .88rem; }
+  .near .txt b { display: block; }
+  .near .txt span { color: var(--muted); font-size: .8rem; }
+  .near .dist { font-family: var(--mono); font-size: .8rem; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .near.missing { opacity: .55; }
 </style>
 </head>
 <body>
@@ -321,6 +343,11 @@
     </div>
 
     <div id="dashboard" hidden style="margin-top:16px">
+      <div class="card accent-diamond" style="margin-bottom:16px">
+        <h3>🌍 Deine Welt auf einen Blick</h3>
+        <p class="muted small">Berechnet aus deinem Seed rund um den Weltursprung X 0 / Z 0. Dein Spawn liegt normalerweise in der Nähe. Entfernungen sind auf etwa ±16 Blöcke genau.</p>
+        <div id="worldSurvey"><p class="muted">Welt wird analysiert …</p></div>
+      </div>
       <div class="grid">
         <div class="card accent-grass">
           <h3>🗺️ Erste 20 Minuten</h3>
@@ -15639,6 +15666,23 @@ return asmFunc({ "env": env });
       ensure(m.lo, m.hi, m.dim);
       var ids = tile(m.scale, m.tx * 64, m.tz * 64, surfaceY(m.scale, m.dim));
       reply({ type: "tile", key: m.key, ids: ids }, [ids.buffer]);
+    } else if (m.type === "survey") {
+      // Overworld overview around the origin at 1:16: biome mix within 2000 blocks,
+      // nearest cell of every biome within 4096 blocks.
+      ensure(m.lo, m.hi, 0);
+      var S2 = 16, R2 = 4, counts = {}, total = 0, nearest = {};
+      for (var sz = -R2; sz < R2; sz++) for (var sx = -R2; sx < R2; sx++) {
+        var sids = tile(S2, sx * 64, sz * 64, surfaceY(S2, 0));
+        for (var k = 0; k < 4096; k++) {
+          var id = sids[k];
+          var cx = (sx * 64 + (k & 63)) * S2 + S2 / 2, cz = (sz * 64 + (k >> 6)) * S2 + S2 / 2;
+          var dd = Math.hypot(cx, cz);
+          if (dd <= 2000) { counts[id] = (counts[id] || 0) + 1; total++; }
+          if (dd <= 4096 && (!nearest[id] || dd < nearest[id].d)) nearest[id] = { x: cx, z: cz, d: dd };
+        }
+      }
+      var oids = tile(4, -32, -32, surfaceY(4, 0));
+      reply({ type: "survey", key: m.key, counts: counts, total: total, nearest: nearest, origin: oids[32 * 64 + 32] });
     } else if (m.type === "find") {
       ensure(m.lo, m.hi, m.dim);
       var S = 64, T = 64 * S, R = 6;
@@ -16370,7 +16414,9 @@ return asmFunc({ "env": env });
     if (m.type === "ready") {
       if (engine.ready) return;
       engine.ready = true; engine.kind = m.kind; clearTimeout(engine.timer);
-      updateEngineChip(); pump(); scheduleDraw();
+      updateEngineChip(); requestSurvey(); pump(); scheduleDraw();
+    } else if (m.type === "survey") {
+      if (seedParts && m.key === seedParts.key) renderSurvey(m);
     } else if (m.type === "tile") {
       engine.inflight = Math.max(0, engine.inflight - 1);
       engine.pending.delete(m.key);
@@ -16416,9 +16462,10 @@ return asmFunc({ "env": env });
     engine.mainThread = true;
     clearTimeout(engine.timer);
     engine.pending.clear(); engine.inflight = 0;
+    surveyKey = null;
     let chain = CubEngine.boot()
       .then((k) => onEngineMsg({ type: "ready", kind: (k === "wasm" ? "WebAssembly" : "JavaScript") + ", ohne Worker" }))
-      .catch(() => { engine.failed = true; updateEngineChip(); scheduleDraw(); });
+      .catch(() => { engine.failed = true; updateEngineChip(); renderSurveyStatus(); scheduleDraw(); });
     engine.post = (m) => {
       chain = chain.then(() => new Promise((res) => setTimeout(() => { try { CubEngine.handle(m, onEngineMsg); } catch (e) { /* skip tile */ } res(); }, 0)));
     };
@@ -16544,6 +16591,140 @@ return asmFunc({ "env": env });
       }
     }
   }
+
+  /* ---------- World survey for the dashboard ---------- */
+  const OCEAN_IDS = new Set([0, 10, 24, 44, 45, 46, 48, 49, 50]);
+  const WATER_IDS = new Set([...OCEAN_IDS, 7, 11]);
+  const GOALS = [
+    { ids: [1, 129, 35, 2, 12, 5, 177], label: "Dorf-Biom", why: "Dörfer entstehen in Ebene, Savanne, Wüste, Taiga, verschneiter Ebene und Wiese." },
+    { ids: [185], label: "Kirschhain", why: "Kirschholz und einer der schönsten Bauplätze." },
+    { ids: [180, 181, 182, 179, 178], label: "Gebirge", why: "Smaragde und viel Eisen (Y 232), Ziegen, Pulverschnee." },
+    { ids: [37, 38, 165], label: "Tafelberge", why: "Gold schon ab Y 32 und Minenschächte an der Oberfläche." },
+    { ids: [24, 48, 49, 50], label: "Tiefsee", why: "Hier stehen Ozeanmonumente (Prismarin, Schwämme)." },
+    { ids: [29], label: "Dunkler Eichenwald", why: "Hier können Waldanwesen stehen (Totems)." },
+    { ids: [21, 23, 168], label: "Dschungel", why: "Dschungeltempel, Kakao, Melonen, Pandas im Bambusdschungel." },
+    { ids: [2], label: "Wüste", why: "Wüstentempel, Wüstenbrunnen mit Archäologie, Kakteen." },
+    { ids: [14], label: "Pilzland", why: "Keine feindlichen Mobs: perfekter sicherer Basis-Ort." },
+    { ids: [186], label: "Blasser Garten", why: "Knarzherz, Augenblüten und blasse Eiche." },
+    { ids: [184], label: "Mangrovensumpf", why: "Frösche, Schlamm und Mangrovenholz." },
+    { ids: [6], label: "Sumpf", why: "Hexenhütten und Schleime in Vollmondnächten." },
+    { ids: [140], label: "Eiszapfentundra", why: "Packeis in Mengen, ideal für Eisbahnen." }
+  ];
+  const DIRS = ["Norden", "Nordosten", "Osten", "Südosten", "Süden", "Südwesten", "Westen", "Nordwesten"];
+  const dirName = (x, z) => DIRS[Math.round(((Math.atan2(x, -z) * 180 / Math.PI) + 360) % 360 / 45) % 8];
+  const fmtNum = (n) => Math.round(n).toLocaleString("de-DE");
+  let surveyKey = null;
+  let lastSurvey = null;
+
+  function renderSurveyStatus() {
+    const el = $("worldSurvey");
+    if (!el) return;
+    if (!seedParts) { el.innerHTML = ""; return; }
+    if (engine.failed) { el.innerHTML = '<p class="muted">Der Weltgenerator konnte in diesem Browser nicht starten. Die Analyse ist deshalb nicht verfügbar.</p>'; return; }
+    el.innerHTML = '<p class="muted">Welt wird analysiert …</p>';
+  }
+
+  function requestSurvey() {
+    if (!seedParts) return;
+    if (surveyKey === seedParts.key) return;
+    renderSurveyStatus();
+    if (!engine.ready) return;
+    surveyKey = seedParts.key;
+    engine.post({ type: "survey", key: seedParts.key, lo: seedParts.lo, hi: seedParts.hi });
+  }
+
+  function nearestOf(r, ids) {
+    let best = null;
+    for (const id of ids) {
+      const n = r.nearest[id];
+      if (n && (!best || n.d < best.d)) best = Object.assign({ id }, n);
+    }
+    return best;
+  }
+
+  function renderSurvey(r) {
+    lastSurvey = r;
+    const el = $("worldSurvey");
+    const counts = Object.entries(r.counts).map(([id, c]) => [Number(id), c]).sort((a, b) => b[1] - a[1]);
+    let water = 0;
+    counts.forEach(([id, c]) => { if (WATER_IDS.has(id)) water += c; });
+    const waterPct = Math.round(water / r.total * 100);
+    const origin = BIOMES[r.origin];
+    const goals = GOALS.map((g) => ({ g, n: nearestOf(r, g.ids) }));
+
+    // Summary stats
+    let html = '<div class="survey-head">' +
+      '<div class="stat"><span>Am Ursprung 0 / 0</span><b><i class="sw" style="background:' + (origin ? origin.hex : "#000") + '"></i> ' + esc(origin ? origin.de : "Unbekannt") + "</b></div>" +
+      '<div class="stat"><span>Land im Umkreis 2000</span><b>' + (100 - waterPct) + " %</b></div>" +
+      '<div class="stat"><span>Wasser im Umkreis 2000</span><b>' + waterPct + " %</b></div>" +
+      '<div class="stat"><span>Verschiedene Biome</span><b>' + counts.length + "</b></div></div>";
+
+    // Biome mix
+    html += '<div class="survey"><div><h4>Biom-Mix im Umkreis von 2000 Blöcken</h4>';
+    counts.slice(0, 9).forEach(([id, c]) => {
+      const b = BIOMES[id]; if (!b) return;
+      const pct = c / r.total * 100;
+      html += '<div class="mix-row"><span class="nm"><i class="sw" style="background:' + b.hex + '"></i>' + esc(b.de) + "</span>" +
+        '<div class="mix-bar"><div style="width:' + Math.max(1, pct / (counts[0][1] / r.total * 100) * 100) + "%;background:" + b.hex + '"></div></div>' +
+        '<span class="pct">' + (pct < 1 ? "<1" : Math.round(pct)) + " %</span></div>";
+    });
+    html += '<h4 style="margin-top:16px">Tipps für genau diese Welt</h4><ul>' + surveyTips(r, origin, waterPct, goals).map((t) => "<li>" + t + "</li>").join("") + "</ul></div>";
+
+    // Nearest goals
+    html += '<div><h4>Wichtige Biome in der Nähe (bis 4096 Blöcke)</h4><div class="near-list">';
+    goals.slice().sort((a, b) => (a.n ? a.n.d : 1e9) - (b.n ? b.n.d : 1e9)).forEach(({ g, n }) => {
+      const b = n ? BIOMES[n.id] : BIOMES[g.ids[0]];
+      if (n) {
+        html += '<div class="near"><i class="sw" style="background:' + b.hex + '"></i><div class="txt"><b>' + esc(g.label) +
+          (b.de !== g.label ? ' <span>(' + esc(b.de) + ")</span>" : "") + "</b><span>" + esc(g.why) + "</span></div>" +
+          '<div class="dist">' + (n.d < 24 ? "am Spawn" : fmtNum(n.d) + " Bl.<br>" + dirName(n.x, n.z)) + "<br>X " + n.x + " Z " + n.z + "</div>" +
+          '<button class="icon-btn" type="button" data-survey-go="' + n.id + '" data-x="' + n.x + '" data-z="' + n.z + '" aria-label="' + esc(g.label) + ' auf der Karte zeigen">🗺️</button></div>';
+      } else {
+        html += '<div class="near missing"><i class="sw" style="background:' + b.hex + '"></i><div class="txt"><b>' + esc(g.label) + "</b><span>Nicht im Umkreis von 4096 Blöcken. Auf der Karte mit „Nächstes finden“ weiter suchen.</span></div></div>";
+      }
+    });
+    html += "</div></div></div>";
+    el.innerHTML = html;
+  }
+
+  function surveyTips(r, origin, waterPct, goals) {
+    const tips = [];
+    const by = (label) => goals.find((x) => x.g.label === label).n;
+    const at = (n) => fmtNum(n.d) + " Blöcke Richtung " + dirName(n.x, n.z) + " (X " + n.x + " / Z " + n.z + ")";
+    if (origin && OCEAN_IDS.has(r.origin)) tips.push("Der Ursprung liegt im <b>Meer</b>. Bau dir früh ein Boot und fahr die Küste ab. So findest du schnell Schiffswracks und Dörfer am Ufer.");
+    const vil = by("Dorf-Biom");
+    if (vil && vil.d < 300) tips.push("Dorf-Biome liegen <b>direkt am Spawn</b>. Erkunde zuerst die nähere Umgebung, die Chance auf ein Dorf ist hoch.");
+    else if (vil) tips.push("Die nächsten Dorf-Biome liegen <b>" + at(vil) + "</b>. Dort lohnt sich die Dorfsuche zuerst.");
+    else tips.push("Rund um den Spawn gibt es kaum Dorf-Biome. Schlag dein erstes Lager selbst auf und erkunde später weiter.");
+    if (waterPct >= 55) tips.push("Sehr viel Wasser (" + waterPct + " %): Ozeanruinen, Wracks und Vergrabene Schätze sind hier dein Startvorteil.");
+    else if (waterPct <= 15) tips.push("Fast nur Land (" + (100 - waterPct) + " %): ideal für schnelle Reisen zu Fuß oder mit Pferd.");
+    const mtn = by("Gebirge");
+    if (mtn && mtn.d < 2500) tips.push("Gebirge " + at(mtn) + ": Grabe dort auf <b>Y 232</b> nach Smaragden und Eisen.");
+    const bad = by("Tafelberge");
+    if (bad && bad.d < 3000) tips.push("Tafelberge " + at(bad) + ": Dort liegt <b>Gold ab Y 32</b> und Minenschächte stehen offen an der Oberfläche.");
+    const deep = by("Tiefsee");
+    if (deep && deep.d < 2000) tips.push("Tiefsee " + at(deep) + ": Halte Ausschau nach einem <b>Ozeanmonument</b>. Kartografen verkaufen die passende Karte.");
+    const cherry = by("Kirschhain");
+    if (cherry && cherry.d < 2500) tips.push("Kirschhain " + at(cherry) + ": ein schöner Platz für deine Hauptbasis.");
+    const mush = by("Pilzland");
+    if (mush) tips.push("Pilzland " + at(mush) + ": Dort spawnen keine feindlichen Monster.");
+    return tips.slice(0, 6);
+  }
+
+  $("worldSurvey").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-survey-go]");
+    if (!btn) return;
+    highlight = Number(btn.dataset.surveyGo);
+    $("biomeLayer").checked = true;
+    setDim("overworld");
+    fillHighlightOptions();
+    tiles.forEach((t) => (t.canvas = null));
+    centerOn(Number(btn.dataset.x), Number(btn.dataset.z), "overworld");
+    view.scale = Math.min(view.scale, 0.5);
+    drawMap();
+    $("mkX").value = btn.dataset.x; $("mkZ").value = btn.dataset.z; $("mkDim").value = "overworld";
+    $("map").scrollIntoView({ behavior: "smooth" });
+  });
 
   function fillHighlightOptions() {
     const dimId = view.dim === "nether" ? -1 : 0;
@@ -16782,8 +16963,9 @@ return asmFunc({ "env": env });
       biome: highlight, x: view.cx, z: view.cz });
   });
 
-  seedListeners.push((seed) => { selectedId = null; setSeedParts(seed); loadMarkers(); renderMarkerList(); drawMap(); });
+  seedListeners.push((seed) => { selectedId = null; setSeedParts(seed); requestSurvey(); loadMarkers(); renderMarkerList(); drawMap(); });
   setSeedParts(currentSeed);
+  requestSurvey();
   fillHighlightOptions();
   updateEngineChip();
   startEngine();
